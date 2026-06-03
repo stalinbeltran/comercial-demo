@@ -76,7 +76,111 @@ Archivo: `scripts/fill_resumen_<nombre>.py`
 - Usa `ON DUPLICATE KEY UPDATE`
 - Incluye `sys.stdout.reconfigure(encoding="utf-8")` al inicio
 
-### 7. Actualizar scripts `_all`
+### 7. Crear script individual `<nombre>_all.py`
+
+Archivo: `scripts/<nombre>_all.py`
+
+Este script gestiona el ciclo completo del reporte de forma aislada, sin tocar
+los demás reportes. Permite probar y recargar un único reporte.
+
+```python
+"""
+scripts/<nombre>_all.py
+Gestiona el ciclo completo del reporte <nombre> de forma aislada.
+
+Uso:
+    python scripts/<nombre>_all.py                # solo fill
+    python scripts/<nombre>_all.py --recreate     # drop + create + fill
+    python scripts/<nombre>_all.py --drop         # solo drop tablas
+    python scripts/<nombre>_all.py --create       # solo crear tablas
+    python scripts/<nombre>_all.py --desde 2025-01-01 --hasta 2025-12-31
+"""
+
+import os, sys, argparse, subprocess
+from datetime import date
+
+sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from dotenv import load_dotenv
+from utils.db_setup import drop_tables, run_sql_file
+
+load_dotenv()
+
+PYTHON = sys.executable
+ROOT   = os.path.dirname(os.path.dirname(__file__))
+
+TABLAS_DESNORM = ["<tabla_desnorm>"]
+TABLAS_AGG     = ["<tabla_agg>"]
+
+SQL_DESNORM    = "scripts/create_<nombre>.sql"
+SQL_AGG        = "scripts/create_resumen_<nombre>.sql"
+
+FILL_DESNORM   = ["scripts/fill_<nombre>.py", "--full"]
+# FILL_AGG se arma en main() para incluir --desde y --hasta
+
+
+def do_drop():
+    db_desnorm = os.getenv("DB_NAME_DESNORM")
+    db_agg     = os.getenv("DB_NAME_AGG")
+    print(f"\nDrop en {db_desnorm}")
+    drop_tables(TABLAS_DESNORM, db_name=db_desnorm)
+    print(f"Drop en {db_agg}")
+    drop_tables(TABLAS_AGG, db_name=db_agg)
+
+
+def do_create():
+    db_desnorm = os.getenv("DB_NAME_DESNORM")
+    db_agg     = os.getenv("DB_NAME_AGG")
+    print(f"\nCreate en {db_desnorm}")
+    run_sql_file(SQL_DESNORM, db_name=db_desnorm)
+    print(f"Create en {db_agg}")
+    run_sql_file(SQL_AGG, db_name=db_agg)
+
+
+def do_fill(desde: str, hasta: str):
+    def run(label, cmd):
+        print(f"\n── {label}")
+        r = subprocess.run(cmd, cwd=ROOT)
+        if r.returncode != 0:
+            sys.exit(r.returncode)
+
+    run("fill desnorm", [PYTHON] + FILL_DESNORM)
+    run("fill agg",     [PYTHON, "scripts/fill_resumen_<nombre>.py",
+                         "--desde", desde, "--hasta", hasta])
+
+
+def main():
+    hoy = date.today()
+    p = argparse.ArgumentParser(description="Ciclo completo reporte <nombre>")
+    p.add_argument("--recreate", action="store_true", help="Drop + create + fill")
+    p.add_argument("--drop",     action="store_true", help="Solo drop")
+    p.add_argument("--create",   action="store_true", help="Solo create")
+    p.add_argument("--desde", default=(hoy.replace(year=hoy.year-2)).isoformat(), metavar="YYYY-MM-DD")
+    p.add_argument("--hasta", default=hoy.isoformat(), metavar="YYYY-MM-DD")
+    args = p.parse_args()
+
+    if args.drop:
+        do_drop()
+    elif args.create:
+        do_create()
+    elif args.recreate:
+        do_drop()
+        do_create()
+        do_fill(args.desde, args.hasta)
+    else:
+        do_fill(args.desde, args.hasta)
+
+    print("\n✓ Completado")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Sustituir `<nombre>`, `<tabla_desnorm>` y `<tabla_agg>` con los valores reales del reporte.
+
+### 8. Actualizar scripts `_all`
 
 **`scripts/drop_all.py`** — agregar las nuevas tablas al dict `TABLAS`:
 ```python
