@@ -99,15 +99,46 @@ En `api/models.py` agregar:
 - Un modelo `Resumen<Nombre>` con los totales
 - Un modelo `Respuesta<Nombre>` que agrupa filtros + resumen + datos
 
-### 9. Crear endpoint FastAPI
+### 9. Crear endpoint FastAPI con documentación completa
 
 Archivo: `api/routes/<nombre>.py`
 - Importa `get_conn_agg` de `api.db`
 - Importa los modelos desde `api.models`
 - Query SQL sobre la tabla `resumen_<nombre>` en `comercialaggregated`
-- Filtros: `fecha_desde`, `fecha_hasta`, `sucursal_id`
-- `response_model`, `summary`, `description`, `responses` documentados
-- Registrar el router en `api/main.py` con su tag
+
+El decorador `@router.get` debe incluir:
+```python
+@router.get(
+    "/<ruta>",
+    response_model=Respuesta<Nombre>,
+    summary="Título corto visible en /docs",
+    description=(
+        "Descripción completa en Markdown. Explicar:\n\n"
+        "- Qué devuelve el endpoint\n"
+        "- De qué tabla lee (`comercialaggregated.<tabla>`)\n"
+        "- Qué hacer si el resultado viene vacío (indicar el fill script)\n"
+        "- Criterio de ordenamiento\n"
+    ),
+    responses={
+        200: {"description": "Descripción del caso exitoso"},
+        400: {"description": "Descripción del caso de error"},
+    },
+)
+```
+
+Cada parámetro `Query` debe incluir `description` y `examples`:
+```python
+fecha_desde: Optional[date] = Query(
+    default=None,
+    description="Descripción del parámetro y su default.",
+    examples={"ejemplo": {"value": "2025-01-01"}},
+)
+```
+
+Registrar el router en `api/main.py`:
+- Agregar `from api.routes import <nombre>` 
+- Agregar `app.include_router(<nombre>.router)`
+- Agregar entrada en la lista `TAGS` con nombre y descripción del grupo
 
 ### 10. Agregar a Postman
 
