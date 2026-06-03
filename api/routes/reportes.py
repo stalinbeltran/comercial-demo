@@ -3,39 +3,26 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from api.db import get_conn
+from api.db import get_conn_agg
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
 
-# Cuando un producto está en una subcategoría, cat_raiz es el padre.
-# Cuando está directo en una categoría raíz, cat_sub ya es la raíz y cat_raiz queda NULL.
-# COALESCE resuelve ambos casos.
 _SQL = """
 SELECT
-    COALESCE(cat_raiz.nombre, cat_sub.nombre)              AS categoria,
-    CASE WHEN cat_raiz.id IS NOT NULL
-         THEN cat_sub.nombre
-         ELSE NULL END                                     AS subcategoria,
-    p.codigo_sku                                           AS sku,
-    p.nombre                                               AS producto,
-    SUM(lp.cantidad)                                       AS unidades_vendidas,
-    ROUND(AVG(lp.precio_unitario), 4)                      AS precio_promedio,
-    ROUND(SUM(lp.descuento_monto), 2)                      AS total_descuentos,
-    ROUND(SUM(lp.subtotal), 2)                             AS ingresos_netos,
-    COUNT(DISTINCT lp.pedido_id)                           AS num_pedidos
-FROM linea_pedido lp
-JOIN pedido       pd         ON pd.id         = lp.pedido_id
-JOIN producto     p          ON p.id          = lp.producto_id
-LEFT JOIN categoria cat_sub  ON cat_sub.id    = p.categoria_id
-LEFT JOIN categoria cat_raiz ON cat_raiz.id   = cat_sub.padre_id
-WHERE pd.estado NOT IN ('cancelado', 'anulado', 'borrador')
-  AND pd.fecha_pedido >= %s
-  AND pd.fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
-  AND (%s IS NULL OR pd.sucursal_id = %s)
-GROUP BY
-    cat_raiz.id, cat_raiz.nombre,
-    cat_sub.id,  cat_sub.nombre,
-    p.id,        p.codigo_sku,  p.nombre
+    categoria,
+    subcategoria,
+    sku,
+    producto,
+    SUM(unidades_vendidas)                          AS unidades_vendidas,
+    ROUND(AVG(precio_promedio), 4)                  AS precio_promedio,
+    ROUND(SUM(total_descuentos), 2)                 AS total_descuentos,
+    ROUND(SUM(ingresos_netos), 2)                   AS ingresos_netos,
+    SUM(num_pedidos)                                AS num_pedidos
+FROM resumen_ventas
+WHERE periodo_inicio >= %s
+  AND periodo_fin    <= %s
+  AND (%s IS NULL OR sucursal_id = %s)
+GROUP BY categoria, subcategoria, sku, producto
 ORDER BY ingresos_netos DESC
 """
 
@@ -59,7 +46,7 @@ def ventas_por_categoria(
     if fecha_desde > fecha_hasta:
         raise HTTPException(status_code=400, detail="fecha_desde no puede ser mayor que fecha_hasta")
 
-    conn = get_conn()
+    conn = get_conn_agg()
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute(_SQL, (fecha_desde, fecha_hasta, sucursal_id, sucursal_id))
