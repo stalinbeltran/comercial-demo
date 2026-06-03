@@ -134,7 +134,39 @@ python scripts/fill_resumen_ventas.py --todos --desde 2025-01-01 --hasta 2025-12
 uvicorn api.main:app --reload
 ```
 
-Documentación interactiva: `http://localhost:8000/docs`
+La raíz `http://localhost:8000` redirige automáticamente a `/docs`.
+
+Para detener el servidor: **`Ctrl + C`** en la terminal donde corre uvicorn.
+
+### Documentación interactiva — /docs (Swagger UI)
+
+La interfaz principal para explorar y probar la API.
+
+- En la parte superior aparece la descripción general: diagrama de flujo de carga y tabla de bases de datos.
+- Los endpoints se agrupan por tag (ej. **Reportes**). Al agregar nuevos endpoints con el mismo tag aparecen aquí automáticamente.
+- Para probar un endpoint:
+  1. Click en el endpoint
+  2. Click en **Try it out**
+  3. Completar los parámetros
+  4. Click en **Execute**
+  5. Ver el `curl` equivalente, la URL completa y el JSON de respuesta
+- Al fondo de cada endpoint hay una sección **Schemas** con la estructura exacta del JSON de respuesta y descripción de cada campo.
+
+### Documentación de solo lectura — /redoc
+
+```
+http://localhost:8000/redoc
+```
+
+Mejor presentación para compartir con clientes o equipo. No permite ejecutar llamadas.
+
+### Spec OpenAPI — /openapi.json
+
+```
+http://localhost:8000/openapi.json
+```
+
+El contrato completo de la API en JSON. Útil para importar en Postman u otras herramientas.
 
 ### GET /reportes/ventas-por-categoria
 
@@ -150,6 +182,9 @@ Ventas agrupadas por categoría, subcategoría y producto.
 GET http://localhost:8000/reportes/ventas-por-categoria?fecha_desde=2025-01-01&fecha_hasta=2025-12-31
 GET http://localhost:8000/reportes/ventas-por-categoria?sucursal_id=2
 ```
+
+> Si el resultado viene vacío, verificar que `resumen_ventas` tenga datos para el rango
+> solicitado. Correr `fill_resumen_ventas.py --desde ... --hasta ...` si es necesario.
 
 ---
 
