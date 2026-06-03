@@ -23,8 +23,10 @@ from utils.db_setup import run_sql_file, drop_tables, tables_from_sql_file
 load_dotenv()
 
 SCRIPTS = [
-    ("scripts/create_reporte_ventas.sql", os.getenv("DB_NAME_DESNORM")),
-    ("scripts/create_resumen_ventas.sql", os.getenv("DB_NAME_AGG")),
+    ("scripts/create_reporte_ventas.sql",               os.getenv("DB_NAME_DESNORM")),
+    ("scripts/create_resumen_ventas.sql",                os.getenv("DB_NAME_AGG")),
+    ("scripts/create_ventas_consolidado.sql",            os.getenv("DB_NAME_DESNORM")),
+    ("scripts/create_resumen_ventas_consolidado.sql",    os.getenv("DB_NAME_AGG")),
 ]
 
 

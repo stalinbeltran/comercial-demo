@@ -18,8 +18,8 @@ from utils.db_setup import drop_tables
 load_dotenv()
 
 TABLAS = {
-    os.getenv("DB_NAME_DESNORM"): ["linea_venta"],
-    os.getenv("DB_NAME_AGG"):     ["resumen_ventas"],
+    os.getenv("DB_NAME_DESNORM"): ["linea_venta", "ventas_consolidado"],
+    os.getenv("DB_NAME_AGG"):     ["resumen_ventas", "resumen_ventas_consolidado"],
 }
 
 

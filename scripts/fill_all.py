@@ -76,6 +76,19 @@ def main():
          "--desde", args.desde, "--hasta", args.hasta],
     )
 
+    # ── Paso 4: ventas_consolidado ────────────────────────────────────────────
+    run(
+        "fill_ventas_consolidado (comercialdesnormalized)",
+        [PYTHON, "scripts/fill_ventas_consolidado.py", "--full"],
+    )
+
+    # ── Paso 5: resumen_ventas_consolidado ────────────────────────────────────
+    run(
+        "fill_resumen_ventas_consolidado (comercialaggregated)",
+        [PYTHON, "scripts/fill_resumen_ventas_consolidado.py",
+         "--desde", args.desde, "--hasta", args.hasta],
+    )
+
     print(f"\n{'─' * 50}")
     print("✓ fill_all completado")
 

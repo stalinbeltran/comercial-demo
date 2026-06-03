@@ -37,3 +37,27 @@ class RespuestaVentasCategoria(BaseModel):
     filtros: FiltrosFecha
     resumen: ResumenVentasCategoria
     datos:   list[VentaProductoItem]
+
+
+# ─── REPORTE 1.1: RESUMEN DE VENTAS CONSOLIDADO ───────────────────────────────
+
+class VentasConsolidadoItem(BaseModel):
+    sucursal_id:      int            = Field(description="ID de sucursal. 0 = total de todas")
+    sucursal_nombre:  Optional[str]  = Field(description="Nombre de la sucursal. null si es total global")
+    pais_nombre:      Optional[str]  = Field(description="País de la sucursal. null si es total global")
+    total_ventas:     float          = Field(description="Suma de subtotales de líneas de pedido (excluye cancelados/anulados)")
+    total_pedidos:    int            = Field(description="Cantidad de pedidos distintos en el período")
+    clientes_activos: int            = Field(description="Cantidad de clientes distintos que realizaron pedidos")
+
+
+class ResumenVentasConsolidado(BaseModel):
+    total_registros:  int   = Field(description="Cantidad de filas en el resultado")
+    total_ventas:     float = Field(description="Suma global de total_ventas")
+    total_pedidos:    int   = Field(description="Suma global de total_pedidos")
+    clientes_activos: int   = Field(description="Suma global de clientes_activos")
+
+
+class RespuestaVentasConsolidado(BaseModel):
+    filtros: FiltrosFecha
+    resumen: ResumenVentasConsolidado
+    datos:   list[VentasConsolidadoItem]
