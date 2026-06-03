@@ -1,25 +1,20 @@
 """
-scripts/fill_reporte_ventas.py — Llena reporte_ventas_producto.
+scripts/fill_reporte_ventas.py
+Lee de 'comercial' e inserta en 'comercialdesnormalizada.linea_venta'.
 
-Modos de uso:
-    # Total de todas las sucursales (sucursal_id = 0), mes actual
-    python scripts/fill_reporte_ventas.py
+Uso:
+    # Carga completa (todos los registros)
+    python scripts/fill_reporte_ventas.py --full
 
-    # Solo una sucursal
-    python scripts/fill_reporte_ventas.py --sucursal 3
-
-    # Todas las sucursales individualmente (una pasada por cada una)
-    python scripts/fill_reporte_ventas.py --todos
-
-    # Con rango de fechas explícito
+    # Incremental por rango de fechas (fecha_pedido)
     python scripts/fill_reporte_ventas.py --desde 2025-01-01 --hasta 2025-12-31
-    python scripts/fill_reporte_ventas.py --todos --desde 2025-01-01 --hasta 2025-12-31
+    python scripts/fill_reporte_ventas.py --desde 2025-06-01          # hasta hoy
 """
 
 import os
 import sys
 import argparse
-from datetime import date, timedelta
+from datetime import date
 
 import mysql.connector
 from dotenv import load_dotenv
@@ -27,221 +22,255 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 load_dotenv()
 
-DB_CONFIG = {
+BATCH_SIZE = 500
+
+# ─── CONEXIONES ───────────────────────────────────────────────────────────────
+
+_BASE = {
     "host":     os.getenv("DB_HOST", "localhost"),
     "port":     int(os.getenv("DB_PORT", "3306")),
     "user":     os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
-    "database": os.getenv("DB_NAME"),
     "charset":  "utf8mb4",
 }
 
+def conn_source():
+    return mysql.connector.connect(**_BASE, database=os.getenv("DB_NAME"))
+
+def conn_target():
+    return mysql.connector.connect(**_BASE, database=os.getenv("DB_NAME_DESNORM"))
+
+
 # ─── QUERIES ──────────────────────────────────────────────────────────────────
 
-# Mismos JOINs y WHERE del reporte de la API.
-# Agrega p.id y, opcionalmente, sucursal_id / sucursal_nombre al SELECT.
-
-_SQL_TOTAL = """
+_SQL_SELECT_RANGO = """
 SELECT
-    COALESCE(cat_raiz.nombre, cat_sub.nombre)              AS categoria,
+    lp.id                                                    AS linea_id,
+    lp.pedido_id,
+    pd.numero_pedido,
+    pd.fecha_pedido,
+    pd.fecha_requerida,
+    pd.estado                                                AS estado_pedido,
+    pd.moneda,
+    cl.id                                                    AS cliente_id,
+    cl.nombre                                                AS cliente_nombre,
+    cl.tipo                                                  AS cliente_tipo,
+    cl.identificacion                                        AS cliente_identificacion,
+    gc.nombre                                                AS grupo_cliente,
+    su.id                                                    AS sucursal_id,
+    su.nombre                                                AS sucursal_nombre,
+    ci.nombre                                                AS ciudad_sucursal,
+    COALESCE(cat_raiz.nombre, cat_sub.nombre)                AS categoria,
     CASE WHEN cat_raiz.id IS NOT NULL
-         THEN cat_sub.nombre
-         ELSE NULL END                                     AS subcategoria,
-    p.id                                                   AS producto_id,
-    p.codigo_sku                                           AS sku,
-    p.nombre                                               AS producto,
-    SUM(lp.cantidad)                                       AS unidades_vendidas,
-    ROUND(AVG(lp.precio_unitario), 4)                      AS precio_promedio,
-    ROUND(SUM(lp.descuento_monto), 2)                      AS total_descuentos,
-    ROUND(SUM(lp.subtotal), 2)                             AS ingresos_netos,
-    COUNT(DISTINCT lp.pedido_id)                           AS num_pedidos
+         THEN cat_sub.nombre ELSE NULL END                   AS subcategoria,
+    p.id                                                     AS producto_id,
+    p.codigo_sku                                             AS sku,
+    p.nombre                                                 AS producto,
+    p.unidad_medida,
+    p.precio_oficial,
+    bo.id                                                    AS bodega_id,
+    bo.nombre                                                AS bodega_nombre,
+    bo.tipo                                                  AS tipo_bodega,
+    lp.cantidad,
+    lp.precio_unitario,
+    lp.descuento_pct,
+    lp.descuento_monto,
+    lp.subtotal,
+    CASE WHEN lp.promocion_id IS NOT NULL THEN 1 ELSE 0 END  AS con_promocion,
+    fa.id                                                    AS factura_id,
+    fa.numero_fiscal,
+    fa.estado                                                AS estado_factura,
+    fa.fecha_emision,
+    fa.impuesto_pct
 FROM linea_pedido lp
-JOIN pedido       pd         ON pd.id        = lp.pedido_id
-JOIN producto     p          ON p.id         = lp.producto_id
-LEFT JOIN categoria cat_sub  ON cat_sub.id   = p.categoria_id
-LEFT JOIN categoria cat_raiz ON cat_raiz.id  = cat_sub.padre_id
-WHERE pd.estado NOT IN ('cancelado', 'anulado', 'borrador')
-  AND pd.fecha_pedido >= %s
+JOIN pedido            pd         ON pd.id        = lp.pedido_id
+JOIN cliente           cl         ON cl.id        = pd.cliente_id
+LEFT JOIN grupo_cliente gc        ON gc.id        = cl.grupo_cliente_id
+JOIN sucursal          su         ON su.id        = pd.sucursal_id
+LEFT JOIN ciudad       ci         ON ci.id        = su.ciudad_id
+JOIN producto          p          ON p.id         = lp.producto_id
+LEFT JOIN categoria    cat_sub    ON cat_sub.id   = p.categoria_id
+LEFT JOIN categoria    cat_raiz   ON cat_raiz.id  = cat_sub.padre_id
+JOIN bodega            bo         ON bo.id        = lp.bodega_id
+LEFT JOIN factura      fa         ON fa.pedido_id = pd.id
+WHERE pd.fecha_pedido >= %s
   AND pd.fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
-GROUP BY
-    cat_raiz.id, cat_raiz.nombre,
-    cat_sub.id,  cat_sub.nombre,
-    p.id,        p.codigo_sku,  p.nombre
+ORDER BY lp.id
 """
 
-_SQL_POR_SUCURSAL = """
+_SQL_SELECT_FULL = """
 SELECT
-    COALESCE(cat_raiz.nombre, cat_sub.nombre)              AS categoria,
+    lp.id                                                    AS linea_id,
+    lp.pedido_id,
+    pd.numero_pedido,
+    pd.fecha_pedido,
+    pd.fecha_requerida,
+    pd.estado                                                AS estado_pedido,
+    pd.moneda,
+    cl.id                                                    AS cliente_id,
+    cl.nombre                                                AS cliente_nombre,
+    cl.tipo                                                  AS cliente_tipo,
+    cl.identificacion                                        AS cliente_identificacion,
+    gc.nombre                                                AS grupo_cliente,
+    su.id                                                    AS sucursal_id,
+    su.nombre                                                AS sucursal_nombre,
+    ci.nombre                                                AS ciudad_sucursal,
+    COALESCE(cat_raiz.nombre, cat_sub.nombre)                AS categoria,
     CASE WHEN cat_raiz.id IS NOT NULL
-         THEN cat_sub.nombre
-         ELSE NULL END                                     AS subcategoria,
-    p.id                                                   AS producto_id,
-    p.codigo_sku                                           AS sku,
-    p.nombre                                               AS producto,
-    pd.sucursal_id                                         AS sucursal_id,
-    s.nombre                                               AS sucursal_nombre,
-    SUM(lp.cantidad)                                       AS unidades_vendidas,
-    ROUND(AVG(lp.precio_unitario), 4)                      AS precio_promedio,
-    ROUND(SUM(lp.descuento_monto), 2)                      AS total_descuentos,
-    ROUND(SUM(lp.subtotal), 2)                             AS ingresos_netos,
-    COUNT(DISTINCT lp.pedido_id)                           AS num_pedidos
+         THEN cat_sub.nombre ELSE NULL END                   AS subcategoria,
+    p.id                                                     AS producto_id,
+    p.codigo_sku                                             AS sku,
+    p.nombre                                                 AS producto,
+    p.unidad_medida,
+    p.precio_oficial,
+    bo.id                                                    AS bodega_id,
+    bo.nombre                                                AS bodega_nombre,
+    bo.tipo                                                  AS tipo_bodega,
+    lp.cantidad,
+    lp.precio_unitario,
+    lp.descuento_pct,
+    lp.descuento_monto,
+    lp.subtotal,
+    CASE WHEN lp.promocion_id IS NOT NULL THEN 1 ELSE 0 END  AS con_promocion,
+    fa.id                                                    AS factura_id,
+    fa.numero_fiscal,
+    fa.estado                                                AS estado_factura,
+    fa.fecha_emision,
+    fa.impuesto_pct
 FROM linea_pedido lp
-JOIN pedido       pd         ON pd.id        = lp.pedido_id
-JOIN producto     p          ON p.id         = lp.producto_id
-LEFT JOIN sucursal s         ON s.id         = pd.sucursal_id
-LEFT JOIN categoria cat_sub  ON cat_sub.id   = p.categoria_id
-LEFT JOIN categoria cat_raiz ON cat_raiz.id  = cat_sub.padre_id
-WHERE pd.estado NOT IN ('cancelado', 'anulado', 'borrador')
-  AND pd.fecha_pedido >= %s
-  AND pd.fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
-  AND pd.sucursal_id = %s
-GROUP BY
-    cat_raiz.id, cat_raiz.nombre,
-    cat_sub.id,  cat_sub.nombre,
-    p.id,        p.codigo_sku,  p.nombre,
-    pd.sucursal_id, s.nombre
+JOIN pedido            pd         ON pd.id        = lp.pedido_id
+JOIN cliente           cl         ON cl.id        = pd.cliente_id
+LEFT JOIN grupo_cliente gc        ON gc.id        = cl.grupo_cliente_id
+JOIN sucursal          su         ON su.id        = pd.sucursal_id
+LEFT JOIN ciudad       ci         ON ci.id        = su.ciudad_id
+JOIN producto          p          ON p.id         = lp.producto_id
+LEFT JOIN categoria    cat_sub    ON cat_sub.id   = p.categoria_id
+LEFT JOIN categoria    cat_raiz   ON cat_raiz.id  = cat_sub.padre_id
+JOIN bodega            bo         ON bo.id        = lp.bodega_id
+LEFT JOIN factura      fa         ON fa.pedido_id = pd.id
+ORDER BY lp.id
 """
 
-_SQL_INSERT = """
-INSERT INTO reporte_ventas_producto
-    (periodo_inicio, periodo_fin, sucursal_id, sucursal_nombre,
-     categoria, subcategoria, producto_id, sku, producto,
-     unidades_vendidas, precio_promedio, total_descuentos, ingresos_netos, num_pedidos)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+_SQL_UPSERT = """
+INSERT INTO linea_venta (
+    linea_id, pedido_id, numero_pedido, fecha_pedido, fecha_requerida,
+    estado_pedido, moneda,
+    cliente_id, cliente_nombre, cliente_tipo, cliente_identificacion, grupo_cliente,
+    sucursal_id, sucursal_nombre, ciudad_sucursal,
+    categoria, subcategoria,
+    producto_id, sku, producto, unidad_medida, precio_oficial,
+    bodega_id, bodega_nombre, tipo_bodega,
+    cantidad, precio_unitario, descuento_pct, descuento_monto, subtotal, con_promocion,
+    factura_id, numero_fiscal, estado_factura, fecha_emision, impuesto_pct
+) VALUES (
+    %(linea_id)s, %(pedido_id)s, %(numero_pedido)s, %(fecha_pedido)s, %(fecha_requerida)s,
+    %(estado_pedido)s, %(moneda)s,
+    %(cliente_id)s, %(cliente_nombre)s, %(cliente_tipo)s, %(cliente_identificacion)s, %(grupo_cliente)s,
+    %(sucursal_id)s, %(sucursal_nombre)s, %(ciudad_sucursal)s,
+    %(categoria)s, %(subcategoria)s,
+    %(producto_id)s, %(sku)s, %(producto)s, %(unidad_medida)s, %(precio_oficial)s,
+    %(bodega_id)s, %(bodega_nombre)s, %(tipo_bodega)s,
+    %(cantidad)s, %(precio_unitario)s, %(descuento_pct)s, %(descuento_monto)s, %(subtotal)s, %(con_promocion)s,
+    %(factura_id)s, %(numero_fiscal)s, %(estado_factura)s, %(fecha_emision)s, %(impuesto_pct)s
+)
 ON DUPLICATE KEY UPDATE
-    sucursal_nombre     = VALUES(sucursal_nombre),
-    categoria           = VALUES(categoria),
-    subcategoria        = VALUES(subcategoria),
-    sku                 = VALUES(sku),
-    producto            = VALUES(producto),
-    unidades_vendidas   = VALUES(unidades_vendidas),
-    precio_promedio     = VALUES(precio_promedio),
-    total_descuentos    = VALUES(total_descuentos),
-    ingresos_netos      = VALUES(ingresos_netos),
-    num_pedidos         = VALUES(num_pedidos),
-    fecha_actualizacion = NOW()
+    numero_pedido          = VALUES(numero_pedido),
+    fecha_pedido           = VALUES(fecha_pedido),
+    fecha_requerida        = VALUES(fecha_requerida),
+    estado_pedido          = VALUES(estado_pedido),
+    cliente_nombre         = VALUES(cliente_nombre),
+    cliente_tipo           = VALUES(cliente_tipo),
+    cliente_identificacion = VALUES(cliente_identificacion),
+    grupo_cliente          = VALUES(grupo_cliente),
+    sucursal_nombre        = VALUES(sucursal_nombre),
+    ciudad_sucursal        = VALUES(ciudad_sucursal),
+    categoria              = VALUES(categoria),
+    subcategoria           = VALUES(subcategoria),
+    sku                    = VALUES(sku),
+    producto               = VALUES(producto),
+    unidad_medida          = VALUES(unidad_medida),
+    precio_oficial         = VALUES(precio_oficial),
+    bodega_nombre          = VALUES(bodega_nombre),
+    tipo_bodega            = VALUES(tipo_bodega),
+    cantidad               = VALUES(cantidad),
+    precio_unitario        = VALUES(precio_unitario),
+    descuento_pct          = VALUES(descuento_pct),
+    descuento_monto        = VALUES(descuento_monto),
+    subtotal               = VALUES(subtotal),
+    con_promocion          = VALUES(con_promocion),
+    factura_id             = VALUES(factura_id),
+    numero_fiscal          = VALUES(numero_fiscal),
+    estado_factura         = VALUES(estado_factura),
+    fecha_emision          = VALUES(fecha_emision),
+    impuesto_pct           = VALUES(impuesto_pct),
+    fecha_carga            = NOW()
 """
 
-_SQL_SUCURSALES_ACTIVAS = "SELECT id, nombre FROM sucursal WHERE activa = 1 ORDER BY id"
 
+# ─── CARGA ────────────────────────────────────────────────────────────────────
 
-# ─── LÓGICA ───────────────────────────────────────────────────────────────────
+def cargar(src, tgt, sql: str, params: tuple = ()):
+    src_cur = src.cursor(dictionary=True)
+    src_cur.execute(sql, params)
 
-def fill_total(conn, desde: date, hasta: date):
-    """Agrega ventas de todas las sucursales en una sola fila por producto."""
-    cur = conn.cursor(dictionary=True)
-    cur.execute(_SQL_TOTAL, (desde, hasta))
-    rows = cur.fetchall()
-    cur.close()
+    tgt_cur = tgt.cursor()
+    total = 0
 
-    if not rows:
-        print("  sin datos para el período indicado")
-        return 0
+    while True:
+        batch = src_cur.fetchmany(BATCH_SIZE)
+        if not batch:
+            break
+        tgt_cur.executemany(_SQL_UPSERT, batch)
+        tgt.commit()
+        total += len(batch)
+        print(f"  {total} filas procesadas...", end="\r")
 
-    registros = [
-        (desde, hasta, 0, None,
-         r["categoria"], r["subcategoria"],
-         r["producto_id"], r["sku"], r["producto"],
-         r["unidades_vendidas"], r["precio_promedio"],
-         r["total_descuentos"], r["ingresos_netos"], r["num_pedidos"])
-        for r in rows
-    ]
-    cur = conn.cursor()
-    cur.executemany(_SQL_INSERT, registros)
-    conn.commit()
-    inserted = cur.rowcount
-    cur.close()
-    return inserted
-
-
-def fill_sucursal(conn, desde: date, hasta: date, sucursal_id: int, sucursal_nombre: str):
-    """Agrega ventas de una sucursal específica."""
-    cur = conn.cursor(dictionary=True)
-    cur.execute(_SQL_POR_SUCURSAL, (desde, hasta, sucursal_id))
-    rows = cur.fetchall()
-    cur.close()
-
-    if not rows:
-        return 0
-
-    registros = [
-        (desde, hasta, sucursal_id, sucursal_nombre,
-         r["categoria"], r["subcategoria"],
-         r["producto_id"], r["sku"], r["producto"],
-         r["unidades_vendidas"], r["precio_promedio"],
-         r["total_descuentos"], r["ingresos_netos"], r["num_pedidos"])
-        for r in rows
-    ]
-    cur = conn.cursor()
-    cur.executemany(_SQL_INSERT, registros)
-    conn.commit()
-    inserted = cur.rowcount
-    cur.close()
-    return inserted
-
-
-def get_sucursales(conn) -> list[dict]:
-    cur = conn.cursor(dictionary=True)
-    cur.execute(_SQL_SUCURSALES_ACTIVAS)
-    rows = cur.fetchall()
-    cur.close()
-    return rows
+    src_cur.close()
+    tgt_cur.close()
+    print(f"  {total} filas upserted          ")
+    return total
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 def parse_args():
-    hoy = date.today()
-    p = argparse.ArgumentParser(description="Fill reporte_ventas_producto")
-    p.add_argument("--desde",    type=date.fromisoformat, default=hoy.replace(day=1),
-                   metavar="YYYY-MM-DD", help="Inicio del período (default: 1° del mes actual)")
-    p.add_argument("--hasta",    type=date.fromisoformat, default=hoy,
-                   metavar="YYYY-MM-DD", help="Fin del período (default: hoy)")
-    p.add_argument("--sucursal", type=int, default=None,
-                   metavar="ID",       help="Llenar solo para esta sucursal")
-    p.add_argument("--todos",    action="store_true",
-                   help="Llenar individualmente para cada sucursal activa")
+    p = argparse.ArgumentParser(description="Fill linea_venta en comercialdesnormalizada")
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--full",  action="store_true",
+                      help="Carga completa — todos los registros de linea_pedido")
+    mode.add_argument("--desde", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                      help="Carga incremental desde esta fecha (fecha_pedido)")
+    p.add_argument("--hasta", type=date.fromisoformat, default=date.today(),
+                   metavar="YYYY-MM-DD",
+                   help="Fin del rango incremental (default: hoy). Requiere --desde.")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
 
-    if args.desde > args.hasta:
+    if not args.full and args.desde > args.hasta:
         print("ERROR: --desde no puede ser mayor que --hasta")
         sys.exit(1)
 
-    conn = mysql.connector.connect(**DB_CONFIG)
-    print(f"Conectado a {DB_CONFIG['database']}@{DB_CONFIG['host']}")
-    print(f"Período: {args.desde} → {args.hasta}\n")
+    src = conn_source()
+    tgt = conn_target()
 
-    if args.todos:
-        sucursales = get_sucursales(conn)
-        print(f"Modo: todas las sucursales ({len(sucursales)} encontradas)")
-        total = 0
-        for s in sucursales:
-            n = fill_sucursal(conn, args.desde, args.hasta, s["id"], s["nombre"])
-            print(f"  sucursal {s['id']:>3} — {s['nombre']:<30} {n:>4} filas upserted")
-            total += n
-        print(f"\n  total filas: {total}")
+    src_db = os.getenv("DB_NAME")
+    tgt_db = os.getenv("DB_NAME_DESNORM")
+    print(f"Origen : {src_db}@{_BASE['host']}")
+    print(f"Destino: {tgt_db}@{_BASE['host']}")
 
-    elif args.sucursal is not None:
-        sucursales = get_sucursales(conn)
-        match = next((s for s in sucursales if s["id"] == args.sucursal), None)
-        if not match:
-            print(f"ERROR: sucursal {args.sucursal} no encontrada o inactiva")
-            sys.exit(1)
-        print(f"Modo: sucursal {match['id']} — {match['nombre']}")
-        n = fill_sucursal(conn, args.desde, args.hasta, match["id"], match["nombre"])
-        print(f"  {n} filas upserted")
-
+    if args.full:
+        print("\nModo: carga completa")
+        cargar(src, tgt, _SQL_SELECT_FULL)
     else:
-        print("Modo: total (todas las sucursales agregadas)")
-        n = fill_total(conn, args.desde, args.hasta)
-        print(f"  {n} filas upserted")
+        print(f"\nModo: incremental  {args.desde} → {args.hasta}")
+        cargar(src, tgt, _SQL_SELECT_RANGO, (args.desde, args.hasta))
 
-    conn.close()
-    print("\n✓ Completado")
+    src.close()
+    tgt.close()
+    print("✓ Completado")
 
 
 if __name__ == "__main__":
