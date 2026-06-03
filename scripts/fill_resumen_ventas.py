@@ -25,6 +25,7 @@ from datetime import date
 import mysql.connector
 from dotenv import load_dotenv
 
+sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 load_dotenv()
 
