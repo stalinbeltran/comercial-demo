@@ -188,6 +188,61 @@ GET http://localhost:8000/reportes/ventas-por-categoria?sucursal_id=2
 
 ---
 
+## Scripts de gestión de tablas y carga completa
+
+### drop_all.py — eliminar tablas derivadas
+
+Borra `linea_venta` (comercialdesnormalized) y `resumen_ventas` (comercialaggregated).
+
+```powershell
+python scripts/drop_all.py
+```
+
+### create_all.py — crear tablas derivadas
+
+```powershell
+# Solo crear (falla si las tablas ya existen)
+python scripts/create_all.py
+
+# Borrar primero y luego crear
+python scripts/create_all.py --recreate
+```
+
+### fill_all.py — carga completa en orden
+
+Ejecuta los tres pasos en secuencia: seed → linea_venta → resumen_ventas.
+
+```powershell
+# Carga completa con rango por defecto (últimos 2 años)
+python scripts/fill_all.py
+
+# Rango explícito
+python scripts/fill_all.py --desde 2025-01-01 --hasta 2026-12-31
+
+# Omitir seed (comercial ya tiene datos)
+python scripts/fill_all.py --skip-seed
+
+# Seed sin borrar datos existentes
+python scripts/fill_all.py --no-reset
+```
+
+### Flujos comunes
+
+```powershell
+# Desde cero
+python scripts/create_all.py
+python scripts/fill_all.py
+
+# Reinicio completo
+python scripts/create_all.py --recreate
+python scripts/fill_all.py
+
+# Solo recargar DBs derivadas (sin tocar comercial)
+python scripts/fill_all.py --skip-seed --desde 2025-01-01 --hasta 2026-12-31
+```
+
+---
+
 ## Postman
 
 Workspace: **Pruebas Comercial**
