@@ -1,9 +1,17 @@
 Vas a implementar un nuevo reporte en el ERP Comercial siguiendo el procedimiento estándar del proyecto.
 
+## Antes de empezar — verificar el catálogo
+
+Lee el archivo `api/data/catalogo.json`.
+
+- Si el reporte solicitado ya tiene `"estado": "implementado"`, notifícalo al usuario y muestra el `endpoint` existente. No continues con el procedimiento.
+- Si está `"pendiente"`, continúa normalmente.
+- Si el reporte no existe en el catálogo, agrégalo al JSON antes de continuar (con `"estado": "pendiente"`).
+
 ## Entrada
 
 El usuario te dará una de estas dos cosas:
-- El **nombre** del reporte (ej. "ventas por cliente", "stock por bodega")
+- El **nombre** del reporte (ej. "ventas por cliente", "stock por bodega") o su número (ej. "1.4")
 - Los **campos** que debe mostrar el reporte
 
 Si te da solo el nombre, deduce los campos lógicos a partir del esquema transaccional en `comercial`.
@@ -147,7 +155,21 @@ Registrar el router en `api/main.py`:
 - URL base: `{{base_url}}/reportes/<nombre>`
 - Incluir query params documentados
 
-### 11. Actualizar USAGE.md
+### 11. Marcar como implementado en el catálogo
+
+En `api/data/catalogo.json`, localizar el reporte por número o nombre y actualizar:
+```json
+{
+  "numero": "X.X",
+  "nombre": "...",
+  "estado": "implementado",
+  "endpoint": "/ruta/del/endpoint"
+}
+```
+
+Guardar el archivo. La página `/catalogo` reflejará el cambio automáticamente al recargar.
+
+### 12. Actualizar USAGE.md
 
 Agregar sección para:
 - Los dos scripts SQL (create)

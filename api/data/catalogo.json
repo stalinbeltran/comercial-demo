@@ -1,0 +1,79 @@
+{
+  "modulos": [
+    {
+      "modulo_id": 1,
+      "modulo": "Ventas y Facturación",
+      "reportes": [
+        {"numero": "1.1", "nombre": "Resumen de ventas consolidado",            "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.2", "nombre": "Ventas por sucursal comparativo",           "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.3", "nombre": "Ventas por producto / categoría",           "estado": "implementado", "endpoint": "/reportes/ventas-por-categoria"},
+        {"numero": "1.4", "nombre": "Ventas por cliente (Top N)",                "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.5", "nombre": "Efectividad de precios especiales",         "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.6", "nombre": "Impacto de promociones",                    "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.7", "nombre": "Pedidos por estado",                        "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.8", "nombre": "Facturas por estado",                       "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 2,
+      "modulo": "Inventario y Bodegas",
+      "reportes": [
+        {"numero": "2.1", "nombre": "Stock actual por bodega",                   "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.2", "nombre": "Stock consolidado por producto",            "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.3", "nombre": "Productos con stock crítico",               "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.4", "nombre": "Productos sin movimiento",                  "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.5", "nombre": "Rotación de inventario",                    "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.6", "nombre": "Trazabilidad de movimientos",               "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.7", "nombre": "Ajustes de inventario",                     "estado": "pendiente",    "endpoint": null},
+        {"numero": "2.8", "nombre": "Traslados entre bodegas",                   "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 3,
+      "modulo": "Transporte y Logística",
+      "reportes": [
+        {"numero": "3.1", "nombre": "Estado de recorridos activos",              "estado": "pendiente",    "endpoint": null},
+        {"numero": "3.2", "nombre": "Cumplimiento de entregas",                  "estado": "pendiente",    "endpoint": null},
+        {"numero": "3.3", "nombre": "Rendimiento por camión",                    "estado": "pendiente",    "endpoint": null},
+        {"numero": "3.4", "nombre": "Rendimiento por conductor",                 "estado": "pendiente",    "endpoint": null},
+        {"numero": "3.6", "nombre": "Entregas fallidas",                         "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 4,
+      "modulo": "Clientes y Cartera",
+      "reportes": [
+        {"numero": "4.1", "nombre": "Clientes activos / inactivos",              "estado": "pendiente",    "endpoint": null},
+        {"numero": "4.2", "nombre": "Pareto de clientes (80/20)",                "estado": "pendiente",    "endpoint": null},
+        {"numero": "4.4", "nombre": "Cuentas por cobrar vencidas",               "estado": "pendiente",    "endpoint": null},
+        {"numero": "4.5", "nombre": "Límites de crédito",                        "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 5,
+      "modulo": "Sucursales y Operaciones",
+      "reportes": [
+        {"numero": "5.1", "nombre": "Dashboard operativo diario",                "estado": "pendiente",    "endpoint": null},
+        {"numero": "5.2", "nombre": "Comparativo de desempeño entre sucursales", "estado": "pendiente",    "endpoint": null},
+        {"numero": "5.3", "nombre": "Desempeño por país",                        "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 6,
+      "modulo": "Productos y Catálogo",
+      "reportes": [
+        {"numero": "6.1", "nombre": "Productos más vendidos",                    "estado": "pendiente",    "endpoint": null},
+        {"numero": "6.3", "nombre": "Análisis de precios",                       "estado": "pendiente",    "endpoint": null},
+        {"numero": "6.4", "nombre": "Promociones activas y vencidas",            "estado": "pendiente",    "endpoint": null}
+      ]
+    },
+    {
+      "modulo_id": 7,
+      "modulo": "Ejecutivos Consolidados",
+      "reportes": [
+        {"numero": "7.1", "nombre": "Dashboard CEO (KPIs del día)",              "estado": "pendiente",    "endpoint": null},
+        {"numero": "7.6", "nombre": "Presupuesto vs ejecución",                  "estado": "pendiente",    "endpoint": null}
+      ]
+    }
+  ]
+}
