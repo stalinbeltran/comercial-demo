@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Body
@@ -305,9 +306,26 @@ def sql_explorer_extract(payload: dict = Body(...)):
 
         results.append({"file": rel_path, "queries": queries})
 
+    # Cargar acumulado existente o iniciar vacío
     OUTPUT_FILE.parent.mkdir(exist_ok=True)
+    if OUTPUT_FILE.exists():
+        try:
+            accumulated = json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            accumulated = {"files": {}}
+    else:
+        accumulated = {"files": {}}
+
+    # Fusionar: actualizar los archivos de esta extracción, preservar el resto
+    ts = datetime.now().isoformat(timespec="seconds")
+    for entry in results:
+        accumulated["files"][entry["file"]] = {
+            "last_extracted": ts,
+            "queries": entry["queries"],
+        }
+
     OUTPUT_FILE.write_text(
-        json.dumps({"results": results}, indent=2, ensure_ascii=False),
+        json.dumps(accumulated, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
 

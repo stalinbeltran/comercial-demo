@@ -1,7 +1,7 @@
 {
-  "results": [
-    {
-      "file": "api/routes/ventas_consolidado.py",
+  "files": {
+    "api/routes/ventas_consolidado.py": {
+      "last_extracted": "2026-06-04T17:18:29",
       "queries": [
         {
           "line": 11,
@@ -9,6 +9,16 @@
           "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_consolidado\nWHERE periodo_inicio >= %s\n  AND periodo_fin    <= %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n"
         }
       ]
+    },
+    "api/routes/ventas_sucursal_comparativo.py": {
+      "last_extracted": "2026-06-04T17:18:13",
+      "queries": [
+        {
+          "line": 17,
+          "variable": "_SQL_MES",
+          "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_sucursal_dia\nWHERE fecha BETWEEN %s AND %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n"
+        }
+      ]
     }
-  ]
+  }
 }
