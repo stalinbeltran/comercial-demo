@@ -80,7 +80,7 @@ def _build_html() -> str:
   header{{max-width:960px;margin:0 auto 1.5rem}}
   header h1{{font-size:1.6rem;font-weight:700;margin-bottom:.25rem}}
   header p{{color:#636e72;font-size:.95rem}}
-  .layout{{max-width:960px;margin:0 auto;display:grid;
+  .layout{{margin:0 auto;display:grid;
            grid-template-columns:340px 1fr;gap:1.5rem;align-items:start}}
   .card{{background:#fff;border-radius:10px;padding:1.25rem;
          box-shadow:0 1px 4px rgba(0,0,0,.08)}}
