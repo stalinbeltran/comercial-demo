@@ -34,10 +34,20 @@ def _build_html() -> str:
     groups = _get_files()
     total = sum(len(v) for v in groups.values())
 
+    # Cargar datos ya extraídos para marcar archivos y pre-poblar el panel
+    if OUTPUT_FILE.exists():
+        try:
+            extracted = json.loads(OUTPUT_FILE.read_text(encoding="utf-8")).get("files", {})
+        except Exception:
+            extracted = {}
+    else:
+        extracted = {}
+    extracted_js = json.dumps(extracted, ensure_ascii=False)
+
     groups_html = ""
     for folder, files in groups.items():
         items = "".join(
-            f"""<li>
+            f"""<li data-has-data="{'true' if f in extracted else 'false'}">
                   <label>
                     <input type="checkbox" class="file-cb" value="{f}">
                     <span class="fname">{Path(f).name}</span>
@@ -96,6 +106,10 @@ def _build_html() -> str:
   .fpath{{color:#b2bec3;font-size:.75rem;font-family:monospace;
           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
   input[type=checkbox]{{accent-color:#0984e3;flex-shrink:0}}
+  li[data-has-data="true"] .fname::after{{content:"";display:inline-block;
+    width:7px;height:7px;border-radius:50%;background:#00b894;
+    margin-left:5px;vertical-align:middle;}}
+  .result-ts{{font-size:.72rem;color:#b2bec3;font-style:italic;margin-left:.4rem;}}
   .btn{{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.2rem;
         border:none;border-radius:6px;font-size:.9rem;font-weight:600;
         cursor:pointer;transition:opacity .15s}}
@@ -177,6 +191,8 @@ def _build_html() -> str:
 <div class="toast" id="toast"></div>
 
 <script>
+const EXTRACTED = {extracted_js};
+
 const checkboxes = () => document.querySelectorAll('.file-cb');
 const groupCbs   = () => document.querySelectorAll('.group-cb');
 
@@ -184,6 +200,21 @@ function updateCounter() {{
   const n = [...checkboxes()].filter(c => c.checked).length;
   document.getElementById('counter').textContent = n + ' seleccionado' + (n===1?'':'s');
   document.getElementById('btnExtract').disabled = n === 0;
+  previewSelected();
+}}
+
+function previewSelected() {{
+  const checked = [...checkboxes()].filter(c => c.checked);
+  if (!checked.length) {{
+    document.getElementById('results').innerHTML =
+      '<p class="empty">Seleccioná archivos y presioná <b>Extraer SQL</b>.</p>';
+    return;
+  }}
+  const items = checked.map(c => {{
+    const d = EXTRACTED[c.value];
+    return {{ file: c.value, queries: d ? d.queries : [], last_extracted: d ? d.last_extracted : null }};
+  }});
+  renderResults(items);
 }}
 
 function selectAll(v) {{
@@ -224,7 +255,13 @@ async function extract() {{
       body: JSON.stringify({{files: selected}}),
     }});
     const data = await res.json();
-    renderResults(data.results);
+    // Sincronizar EXTRACTED en memoria y actualizar puntos indicadores
+    const ts = new Date().toISOString().slice(0, 19);
+    data.results.forEach(r => {{
+      EXTRACTED[r.file] = {{ last_extracted: ts, queries: r.queries }};
+      const cb = [...checkboxes()].find(c => c.value === r.file);
+      if (cb) cb.closest('li').dataset.hasData = 'true';
+    }});
     document.getElementById('btnDl').style.display = 'inline-flex';
     const total = data.results.reduce((s,r)=>s+r.queries.length,0);
     showToast(`${{total}} quer${{total===1?'y':'ies'}} extraído${{total===1?'':'s'}} — JSON guardado`);
@@ -250,12 +287,15 @@ function renderResults(results) {{
             </div>
             <pre>${{escHtml(q.sql.trim())}}</pre>
           </div>`).join('')
-      : '<div class="no-sql">Sin queries SQL detectados</div>';
+      : `<div class="no-sql">${{r.last_extracted ? 'Sin queries SQL en este archivo' : 'Aún no extraído'}}</div>`;
+
+    const ts = r.last_extracted
+      ? `<span class="result-ts">${{r.last_extracted}}</span>` : '';
 
     return `<div class="file-block">
       <div class="file-block-header">
         <span>${{r.file}}</span>
-        <span style="color:#b2bec3">${{r.queries.length}} quer${{r.queries.length===1?'y':'ies'}}</span>
+        <span style="color:#b2bec3">${{r.queries.length}} quer${{r.queries.length===1?'y':'ies'}}${{ts}}</span>
       </div>
       ${{queries}}
     </div>`;
