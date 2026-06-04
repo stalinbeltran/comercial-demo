@@ -53,11 +53,16 @@ Archivo: `reportes/<nombre>/create_<tabla_desnorm>.sql`
 Archivo: `reportes/<nombre>/create_resumen_<nombre>.sql`
 - DB destino: `comercialaggregated`
 - Sin claves foráneas
-- Columnas de período: `periodo_inicio DATE`, `periodo_fin DATE`
-- `sucursal_id INT NOT NULL DEFAULT 0` (0 = todas)
-- UNIQUE KEY en `(periodo_inicio, periodo_fin, sucursal_id, <id_grain>)`
+- **Granularidad diaria**: una fila por (`fecha`, `sucursal_id`, [dimensiones del reporte])
+- `fecha DATE NOT NULL` — representa el día al que corresponden las métricas
+- `sucursal_id INT NOT NULL DEFAULT 0` (0 = todas las sucursales)
+- UNIQUE KEY en `(fecha, sucursal_id, <otras_dimensiones>)`
 - Columna `fecha_actualizacion DATETIME` con ON UPDATE CURRENT_TIMESTAMP
-- Índices en período, sucursal y dimensiones principales
+- Índices en `fecha`, sucursal y dimensiones principales
+
+La granularidad diaria permite que la API agregue sobre cualquier rango de fechas
+sumando días, sin necesidad de recalcular. El fill script inserta/actualiza un registro
+por cada combinación (`fecha`, `sucursal`) encontrada en la fuente.
 
 ### 5. Crear script de fill — desnormalizada
 
@@ -81,6 +86,33 @@ Archivo: `reportes/<nombre>/fill_resumen_<nombre>.py`
 - Soporta `--desde`/`--hasta`, `--sucursal`, `--todos`
 - Usa `ON DUPLICATE KEY UPDATE`
 - Mismo bloque de inicio que el fill desnorm (con `_ROOT` a 3 niveles)
+- El query de agregación **agrupa por `DATE(fecha_pedido)` y `sucursal_id`**,
+  produciendo una fila por día por combinación de dimensiones:
+
+```sql
+SELECT
+    DATE(fecha_pedido)              AS fecha,
+    sucursal_id,
+    sucursal_nombre,
+    -- ... otras dimensiones del reporte ...
+    SUM(...)                        AS metrica_1,
+    COUNT(DISTINCT pedido_id)       AS total_pedidos
+FROM <tabla_desnorm>
+WHERE fecha_pedido >= %s
+  AND fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
+  -- filtros adicionales (estado, etc.)
+GROUP BY DATE(fecha_pedido), sucursal_id, sucursal_nombre, -- otras dimensiones
+```
+
+El endpoint de la API agrega los días sumando sobre el rango solicitado:
+```sql
+SELECT sucursal_id, sucursal_nombre, SUM(metrica_1), SUM(total_pedidos)
+FROM resumen_<nombre>
+WHERE fecha BETWEEN %s AND %s
+  AND (%s IS NULL OR sucursal_id = %s)
+GROUP BY sucursal_id, sucursal_nombre
+ORDER BY SUM(metrica_1) DESC
+```
 
 ### 7. Crear script individual `<nombre>_all.py`
 
