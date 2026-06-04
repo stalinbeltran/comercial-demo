@@ -1,7 +1,7 @@
 -- ============================================================
--- create_reporte_ventas.sql
+-- create_linea_venta.sql
 -- Tabla desnormalizada de líneas de venta
--- DB destino: comercialdesnormalizada
+-- DB destino: comercialdesnormalized
 -- Grain: un registro por linea_pedido (sin agregación)
 -- Sin claves foráneas — DB separada del esquema transaccional
 -- ============================================================

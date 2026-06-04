@@ -1,13 +1,13 @@
 """
-scripts/ventas_consolidado_all.py
-Gestiona el ciclo completo del reporte 1.1 — Resumen de ventas consolidado.
+reportes/ventas_por_categoria/ventas_por_categoria_all.py
+Gestiona el ciclo completo del reporte 1.3 — Ventas por producto / categoría.
 
 Uso:
-    python scripts/ventas_consolidado_all.py                # drop + create + fill (default)
-    python scripts/ventas_consolidado_all.py --fill-only    # solo recarga datos (tablas deben existir)
-    python scripts/ventas_consolidado_all.py --drop         # solo drop tablas
-    python scripts/ventas_consolidado_all.py --create       # solo crear tablas
-    python scripts/ventas_consolidado_all.py --desde 2025-01-01 --hasta 2025-12-31
+    python reportes/ventas_por_categoria/ventas_por_categoria_all.py
+    python reportes/ventas_por_categoria/ventas_por_categoria_all.py --fill-only
+    python reportes/ventas_por_categoria/ventas_por_categoria_all.py --drop
+    python reportes/ventas_por_categoria/ventas_por_categoria_all.py --create
+    python reportes/ventas_por_categoria/ventas_por_categoria_all.py --desde 2025-01-01 --hasta 2025-12-31
 """
 
 import os
@@ -17,23 +17,26 @@ import subprocess
 from datetime import date
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+_DIR  = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(os.path.dirname(_DIR))
+sys.path.insert(0, _ROOT)
 
 from dotenv import load_dotenv
 from utils.db_setup import drop_tables, run_sql_file
 
-load_dotenv()
+load_dotenv(os.path.join(_ROOT, ".env"))
 
 PYTHON = sys.executable
-ROOT   = os.path.dirname(os.path.dirname(__file__))
 
-TABLAS_DESNORM = ["ventas_consolidado"]
-TABLAS_AGG     = ["resumen_ventas_consolidado"]
+TABLAS_DESNORM = ["linea_venta"]
+TABLAS_AGG     = ["resumen_ventas"]
 
-SQL_DESNORM    = "scripts/create_ventas_consolidado.sql"
-SQL_AGG        = "scripts/create_resumen_ventas_consolidado.sql"
+SQL_DESNORM = os.path.join(_DIR, "create_linea_venta.sql")
+SQL_AGG     = os.path.join(_DIR, "create_resumen_ventas.sql")
 
-FILL_DESNORM   = ["scripts/fill_ventas_consolidado.py", "--full"]
+FILL_DESNORM = os.path.join(_DIR, "fill_linea_venta.py")
+FILL_AGG     = os.path.join(_DIR, "fill_resumen_ventas.py")
 
 
 def do_drop():
@@ -53,19 +56,18 @@ def do_create():
 def do_fill(desde: str, hasta: str):
     def run(label, cmd):
         print(f"\n── {label}")
-        r = subprocess.run(cmd, cwd=ROOT)
+        r = subprocess.run(cmd, cwd=_ROOT)
         if r.returncode != 0:
             sys.exit(r.returncode)
 
-    run("fill desnorm", [PYTHON] + FILL_DESNORM)
-    run("fill agg",     [PYTHON, "scripts/fill_resumen_ventas_consolidado.py",
-                         "--desde", desde, "--hasta", hasta])
+    run("fill desnorm", [PYTHON, FILL_DESNORM, "--full"])
+    run("fill agg",     [PYTHON, FILL_AGG, "--desde", desde, "--hasta", hasta])
 
 
 def main():
     hoy = date.today()
-    p = argparse.ArgumentParser(description="Ciclo completo reporte 1.1 — Ventas consolidado")
-    p.add_argument("--fill-only", action="store_true", help="Solo recarga datos (tablas deben existir)")
+    p = argparse.ArgumentParser(description="Ciclo completo reporte 1.3 — Ventas por categoria")
+    p.add_argument("--fill-only", action="store_true", help="Solo recarga datos")
     p.add_argument("--drop",      action="store_true", help="Solo drop tablas")
     p.add_argument("--create",    action="store_true", help="Solo crear tablas")
     p.add_argument("--desde", default=(hoy.replace(year=hoy.year - 2)).isoformat(), metavar="YYYY-MM-DD")
@@ -83,7 +85,7 @@ def main():
         do_create()
         do_fill(args.desde, args.hasta)
 
-    print("\n✓ Completado")
+    print("\nCompletado")
 
 
 if __name__ == "__main__":

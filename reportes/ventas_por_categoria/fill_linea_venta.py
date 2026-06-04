@@ -1,14 +1,11 @@
 """
-scripts/fill_reporte_ventas.py
-Lee de 'comercial' e inserta en 'comercialdesnormalizada.linea_venta'.
+reportes/ventas_por_categoria/fill_linea_venta.py
+Lee de 'comercial' e inserta en 'comercialdesnormalized.linea_venta'.
 
 Uso:
-    # Carga completa (todos los registros)
-    python scripts/fill_reporte_ventas.py --full
-
-    # Incremental por rango de fechas (fecha_pedido)
-    python scripts/fill_reporte_ventas.py --desde 2025-01-01 --hasta 2025-12-31
-    python scripts/fill_reporte_ventas.py --desde 2025-06-01          # hasta hoy
+    python reportes/ventas_por_categoria/fill_linea_venta.py --full
+    python reportes/ventas_por_categoria/fill_linea_venta.py --desde 2025-01-01
+    python reportes/ventas_por_categoria/fill_linea_venta.py --desde 2025-01-01 --hasta 2025-12-31
 """
 
 import os
@@ -19,12 +16,12 @@ from datetime import date
 import mysql.connector
 from dotenv import load_dotenv
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-load_dotenv()
+sys.stdout.reconfigure(encoding="utf-8")
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _ROOT)
+load_dotenv(os.path.join(_ROOT, ".env"))
 
 BATCH_SIZE = 500
-
-# ─── CONEXIONES ───────────────────────────────────────────────────────────────
 
 _BASE = {
     "host":     os.getenv("DB_HOST", "localhost"),
@@ -40,8 +37,6 @@ def conn_source():
 def conn_target():
     return mysql.connector.connect(**_BASE, database=os.getenv("DB_NAME_DESNORM"))
 
-
-# ─── QUERIES ──────────────────────────────────────────────────────────────────
 
 _SQL_SELECT_RANGO = """
 SELECT
@@ -207,15 +202,11 @@ ON DUPLICATE KEY UPDATE
 """
 
 
-# ─── CARGA ────────────────────────────────────────────────────────────────────
-
 def cargar(src, tgt, sql: str, params: tuple = ()):
     src_cur = src.cursor(dictionary=True)
     src_cur.execute(sql, params)
-
     tgt_cur = tgt.cursor()
     total = 0
-
     while True:
         batch = src_cur.fetchmany(BATCH_SIZE)
         if not batch:
@@ -224,53 +215,35 @@ def cargar(src, tgt, sql: str, params: tuple = ()):
         tgt.commit()
         total += len(batch)
         print(f"  {total} filas procesadas...", end="\r")
-
     src_cur.close()
     tgt_cur.close()
     print(f"  {total} filas upserted          ")
     return total
 
 
-# ─── CLI ──────────────────────────────────────────────────────────────────────
-
-def parse_args():
-    p = argparse.ArgumentParser(description="Fill linea_venta en comercialdesnormalizada")
-    mode = p.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--full",  action="store_true",
-                      help="Carga completa — todos los registros de linea_pedido")
-    mode.add_argument("--desde", type=date.fromisoformat, metavar="YYYY-MM-DD",
-                      help="Carga incremental desde esta fecha (fecha_pedido)")
-    p.add_argument("--hasta", type=date.fromisoformat, default=date.today(),
-                   metavar="YYYY-MM-DD",
-                   help="Fin del rango incremental (default: hoy). Requiere --desde.")
-    return p.parse_args()
-
-
 def main():
-    args = parse_args()
-
-    if not args.full and args.desde > args.hasta:
-        print("ERROR: --desde no puede ser mayor que --hasta")
-        sys.exit(1)
+    p = argparse.ArgumentParser(description="Fill linea_venta en comercialdesnormalized")
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--full",  action="store_true", help="Carga completa")
+    mode.add_argument("--desde", type=date.fromisoformat, metavar="YYYY-MM-DD")
+    p.add_argument("--hasta", type=date.fromisoformat, default=date.today(), metavar="YYYY-MM-DD")
+    args = p.parse_args()
 
     src = conn_source()
     tgt = conn_target()
-
-    src_db = os.getenv("DB_NAME")
-    tgt_db = os.getenv("DB_NAME_DESNORM")
-    print(f"Origen : {src_db}@{_BASE['host']}")
-    print(f"Destino: {tgt_db}@{_BASE['host']}")
+    print(f"Origen : {os.getenv('DB_NAME')}@{_BASE['host']}")
+    print(f"Destino: {os.getenv('DB_NAME_DESNORM')}@{_BASE['host']}")
 
     if args.full:
         print("\nModo: carga completa")
         cargar(src, tgt, _SQL_SELECT_FULL)
     else:
-        print(f"\nModo: incremental  {args.desde} → {args.hasta}")
+        print(f"\nModo: incremental  {args.desde} - {args.hasta}")
         cargar(src, tgt, _SQL_SELECT_RANGO, (args.desde, args.hasta))
 
     src.close()
     tgt.close()
-    print("✓ Completado")
+    print("Completado")
 
 
 if __name__ == "__main__":

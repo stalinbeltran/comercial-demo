@@ -62,19 +62,19 @@ def main():
         run("seed_db (comercial)", seed_cmd)
 
     # ── Fills desnorm ─────────────────────────────────────────────────────────
-    run("fill_reporte_ventas (linea_venta)",
-        [PYTHON, "scripts/fill_reporte_ventas.py", "--full"])
+    run("fill linea_venta",
+        [PYTHON, "reportes/ventas_por_categoria/fill_linea_venta.py", "--full"])
 
-    run("fill_ventas_consolidado (ventas_consolidado)",
-        [PYTHON, "scripts/fill_ventas_consolidado.py", "--full"])
+    run("fill ventas_consolidado",
+        [PYTHON, "reportes/ventas_consolidado/fill_ventas_consolidado.py", "--full"])
 
     # ── Fills agg ─────────────────────────────────────────────────────────────
-    run("fill_resumen_ventas (resumen_ventas)",
-        [PYTHON, "scripts/fill_resumen_ventas.py",
+    run("fill resumen_ventas",
+        [PYTHON, "reportes/ventas_por_categoria/fill_resumen_ventas.py",
          "--desde", args.desde, "--hasta", args.hasta])
 
-    run("fill_resumen_ventas_consolidado (resumen_ventas_consolidado)",
-        [PYTHON, "scripts/fill_resumen_ventas_consolidado.py",
+    run("fill resumen_ventas_consolidado",
+        [PYTHON, "reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py",
          "--desde", args.desde, "--hasta", args.hasta])
 
     print(f"\n{'─' * 50}")

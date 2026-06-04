@@ -1,11 +1,11 @@
 """
-scripts/fill_ventas_consolidado.py
+reportes/ventas_consolidado/fill_ventas_consolidado.py
 Lee de 'comercial' e inserta en 'comercialdesnormalized.ventas_consolidado'.
 
 Uso:
-    python scripts/fill_ventas_consolidado.py --full
-    python scripts/fill_ventas_consolidado.py --desde 2025-01-01
-    python scripts/fill_ventas_consolidado.py --desde 2025-01-01 --hasta 2025-12-31
+    python reportes/ventas_consolidado/fill_ventas_consolidado.py --full
+    python reportes/ventas_consolidado/fill_ventas_consolidado.py --desde 2025-01-01
+    python reportes/ventas_consolidado/fill_ventas_consolidado.py --desde 2025-01-01 --hasta 2025-12-31
 """
 
 import os
@@ -17,8 +17,9 @@ import mysql.connector
 from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-load_dotenv()
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _ROOT)
+load_dotenv(os.path.join(_ROOT, ".env"))
 
 BATCH_SIZE = 500
 
@@ -38,46 +39,30 @@ def conn_target():
 
 
 _SQL_SELECT_FULL = """
-SELECT
-    lp.id                AS linea_id,
-    lp.pedido_id,
-    pd.numero_pedido,
-    pd.fecha_pedido,
-    pd.estado            AS estado_pedido,
-    pd.moneda,
-    pd.cliente_id,
-    su.id                AS sucursal_id,
-    su.nombre            AS sucursal_nombre,
-    pa.id                AS pais_id,
-    pa.nombre            AS pais_nombre,
-    lp.subtotal          AS subtotal_linea
+SELECT lp.id AS linea_id, lp.pedido_id, pd.numero_pedido, pd.fecha_pedido,
+    pd.estado AS estado_pedido, pd.moneda, pd.cliente_id,
+    su.id AS sucursal_id, su.nombre AS sucursal_nombre,
+    pa.id AS pais_id, pa.nombre AS pais_nombre,
+    lp.subtotal AS subtotal_linea
 FROM linea_pedido lp
-JOIN pedido   pd ON pd.id  = lp.pedido_id
-JOIN sucursal su ON su.id  = pd.sucursal_id
-JOIN ciudad   ci ON ci.id  = su.ciudad_id
-JOIN pais     pa ON pa.id  = ci.pais_id
+JOIN pedido   pd ON pd.id = lp.pedido_id
+JOIN sucursal su ON su.id = pd.sucursal_id
+JOIN ciudad   ci ON ci.id = su.ciudad_id
+JOIN pais     pa ON pa.id = ci.pais_id
 ORDER BY lp.id
 """
 
 _SQL_SELECT_RANGO = """
-SELECT
-    lp.id                AS linea_id,
-    lp.pedido_id,
-    pd.numero_pedido,
-    pd.fecha_pedido,
-    pd.estado            AS estado_pedido,
-    pd.moneda,
-    pd.cliente_id,
-    su.id                AS sucursal_id,
-    su.nombre            AS sucursal_nombre,
-    pa.id                AS pais_id,
-    pa.nombre            AS pais_nombre,
-    lp.subtotal          AS subtotal_linea
+SELECT lp.id AS linea_id, lp.pedido_id, pd.numero_pedido, pd.fecha_pedido,
+    pd.estado AS estado_pedido, pd.moneda, pd.cliente_id,
+    su.id AS sucursal_id, su.nombre AS sucursal_nombre,
+    pa.id AS pais_id, pa.nombre AS pais_nombre,
+    lp.subtotal AS subtotal_linea
 FROM linea_pedido lp
-JOIN pedido   pd ON pd.id  = lp.pedido_id
-JOIN sucursal su ON su.id  = pd.sucursal_id
-JOIN ciudad   ci ON ci.id  = su.ciudad_id
-JOIN pais     pa ON pa.id  = ci.pais_id
+JOIN pedido   pd ON pd.id = lp.pedido_id
+JOIN sucursal su ON su.id = pd.sucursal_id
+JOIN ciudad   ci ON ci.id = su.ciudad_id
+JOIN pais     pa ON pa.id = ci.pais_id
 WHERE pd.fecha_pedido >= %s
   AND pd.fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
 ORDER BY lp.id
@@ -94,17 +79,14 @@ INSERT INTO ventas_consolidado (
     %(pais_id)s, %(pais_nombre)s, %(subtotal_linea)s
 )
 ON DUPLICATE KEY UPDATE
-    numero_pedido   = VALUES(numero_pedido),
-    fecha_pedido    = VALUES(fecha_pedido),
-    estado_pedido   = VALUES(estado_pedido),
-    sucursal_nombre = VALUES(sucursal_nombre),
-    pais_nombre     = VALUES(pais_nombre),
-    subtotal_linea  = VALUES(subtotal_linea),
-    fecha_carga     = NOW()
+    numero_pedido=VALUES(numero_pedido), fecha_pedido=VALUES(fecha_pedido),
+    estado_pedido=VALUES(estado_pedido), sucursal_nombre=VALUES(sucursal_nombre),
+    pais_nombre=VALUES(pais_nombre), subtotal_linea=VALUES(subtotal_linea),
+    fecha_carga=NOW()
 """
 
 
-def cargar(src, tgt, sql: str, params: tuple = ()):
+def cargar(src, tgt, sql, params=()):
     src_cur = src.cursor(dictionary=True)
     src_cur.execute(sql, params)
     tgt_cur = tgt.cursor()
@@ -126,7 +108,7 @@ def cargar(src, tgt, sql: str, params: tuple = ()):
 def main():
     p = argparse.ArgumentParser(description="Fill ventas_consolidado")
     mode = p.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--full",  action="store_true", help="Carga completa")
+    mode.add_argument("--full",  action="store_true")
     mode.add_argument("--desde", type=date.fromisoformat, metavar="YYYY-MM-DD")
     p.add_argument("--hasta", type=date.fromisoformat, default=date.today(), metavar="YYYY-MM-DD")
     args = p.parse_args()
@@ -145,7 +127,7 @@ def main():
 
     src.close()
     tgt.close()
-    print("✓ Completado")
+    print("Completado")
 
 
 if __name__ == "__main__":

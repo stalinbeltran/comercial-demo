@@ -1,13 +1,13 @@
 """
-scripts/fill_resumen_ventas_consolidado.py
+reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py
 Lee de 'comercialdesnormalized.ventas_consolidado'
 e inserta en 'comercialaggregated.resumen_ventas_consolidado'.
 
 Uso:
-    python scripts/fill_resumen_ventas_consolidado.py
-    python scripts/fill_resumen_ventas_consolidado.py --desde 2025-01-01 --hasta 2025-12-31
-    python scripts/fill_resumen_ventas_consolidado.py --sucursal 3
-    python scripts/fill_resumen_ventas_consolidado.py --todos
+    python reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py
+    python reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py --desde 2025-01-01 --hasta 2025-12-31
+    python reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py --sucursal 3
+    python reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py --todos
 """
 
 import os
@@ -19,8 +19,9 @@ import mysql.connector
 from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-load_dotenv()
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _ROOT)
+load_dotenv(os.path.join(_ROOT, ".env"))
 
 _BASE = {
     "host":     os.getenv("DB_HOST", "localhost"),
@@ -38,37 +39,29 @@ def conn_target():
 
 
 _SQL_TOTAL = """
-SELECT
-    ROUND(SUM(subtotal_linea), 2)    AS total_ventas,
-    COUNT(DISTINCT pedido_id)        AS total_pedidos,
-    COUNT(DISTINCT cliente_id)       AS clientes_activos
+SELECT ROUND(SUM(subtotal_linea),2) AS total_ventas,
+    COUNT(DISTINCT pedido_id) AS total_pedidos,
+    COUNT(DISTINCT cliente_id) AS clientes_activos
 FROM ventas_consolidado
-WHERE estado_pedido NOT IN ('cancelado', 'anulado')
-  AND fecha_pedido >= %s
-  AND fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
+WHERE estado_pedido NOT IN ('cancelado','anulado')
+  AND fecha_pedido >= %s AND fecha_pedido < DATE_ADD(%s, INTERVAL 1 DAY)
 """
 
 _SQL_POR_SUCURSAL = """
-SELECT
-    sucursal_id,
-    sucursal_nombre,
-    pais_nombre,
-    ROUND(SUM(subtotal_linea), 2)    AS total_ventas,
-    COUNT(DISTINCT pedido_id)        AS total_pedidos,
-    COUNT(DISTINCT cliente_id)       AS clientes_activos
+SELECT sucursal_id, sucursal_nombre, pais_nombre,
+    ROUND(SUM(subtotal_linea),2) AS total_ventas,
+    COUNT(DISTINCT pedido_id) AS total_pedidos,
+    COUNT(DISTINCT cliente_id) AS clientes_activos
 FROM ventas_consolidado
-WHERE estado_pedido NOT IN ('cancelado', 'anulado')
-  AND fecha_pedido >= %s
-  AND fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
+WHERE estado_pedido NOT IN ('cancelado','anulado')
+  AND fecha_pedido >= %s AND fecha_pedido < DATE_ADD(%s, INTERVAL 1 DAY)
   AND sucursal_id = %s
 GROUP BY sucursal_id, sucursal_nombre, pais_nombre
 """
 
 _SQL_SUCURSALES = """
 SELECT DISTINCT sucursal_id AS id, sucursal_nombre AS nombre
-FROM ventas_consolidado
-WHERE sucursal_id IS NOT NULL
-ORDER BY sucursal_id
+FROM ventas_consolidado WHERE sucursal_id IS NOT NULL ORDER BY sucursal_id
 """
 
 _SQL_UPSERT = """
@@ -81,16 +74,13 @@ INSERT INTO resumen_ventas_consolidado (
     %(total_ventas)s, %(total_pedidos)s, %(clientes_activos)s
 )
 ON DUPLICATE KEY UPDATE
-    sucursal_nombre  = VALUES(sucursal_nombre),
-    pais_nombre      = VALUES(pais_nombre),
-    total_ventas     = VALUES(total_ventas),
-    total_pedidos    = VALUES(total_pedidos),
-    clientes_activos = VALUES(clientes_activos),
-    fecha_actualizacion = NOW()
+    sucursal_nombre=VALUES(sucursal_nombre), pais_nombre=VALUES(pais_nombre),
+    total_ventas=VALUES(total_ventas), total_pedidos=VALUES(total_pedidos),
+    clientes_activos=VALUES(clientes_activos), fecha_actualizacion=NOW()
 """
 
 
-def _upsert(tgt, rows: list) -> int:
+def _upsert(tgt, rows):
     if not rows:
         return 0
     cur = tgt.cursor()
@@ -100,8 +90,7 @@ def _upsert(tgt, rows: list) -> int:
     cur.close()
     return n
 
-
-def fill_total(src, tgt, desde: date, hasta: date) -> int:
+def fill_total(src, tgt, desde, hasta):
     cur = src.cursor(dictionary=True)
     cur.execute(_SQL_TOTAL, (desde, hasta))
     row = cur.fetchone()
@@ -111,17 +100,14 @@ def fill_total(src, tgt, desde: date, hasta: date) -> int:
     return _upsert(tgt, [{**row, "periodo_inicio": desde, "periodo_fin": hasta,
                            "sucursal_id": 0, "sucursal_nombre": None, "pais_nombre": None}])
 
-
-def fill_sucursal(src, tgt, desde: date, hasta: date,
-                  sucursal_id: int, sucursal_nombre: str) -> int:
+def fill_sucursal(src, tgt, desde, hasta, sucursal_id, sucursal_nombre):
     cur = src.cursor(dictionary=True)
     cur.execute(_SQL_POR_SUCURSAL, (desde, hasta, sucursal_id))
     rows = [{**r, "periodo_inicio": desde, "periodo_fin": hasta} for r in cur.fetchall()]
     cur.close()
     return _upsert(tgt, rows)
 
-
-def get_sucursales(src) -> list:
+def get_sucursales(src):
     cur = src.cursor(dictionary=True)
     cur.execute(_SQL_SUCURSALES)
     rows = cur.fetchall()
@@ -146,7 +132,6 @@ def main():
 
     if args.todos:
         sucursales = get_sucursales(src)
-        print(f"Modo: todas las sucursales ({len(sucursales)} encontradas)")
         total = 0
         for s in sucursales:
             n = fill_sucursal(src, tgt, args.desde, args.hasta, s["id"], s["nombre"])
@@ -159,17 +144,15 @@ def main():
         if not match:
             print(f"ERROR: sucursal {args.sucursal} no encontrada")
             sys.exit(1)
-        print(f"Modo: sucursal {match['id']} — {match['nombre']}")
         n = fill_sucursal(src, tgt, args.desde, args.hasta, match["id"], match["nombre"])
         print(f"  {n} filas upserted")
     else:
-        print("Modo: total (todas las sucursales agregadas, sucursal_id = 0)")
         n = fill_total(src, tgt, args.desde, args.hasta)
         print(f"  {n} filas upserted")
 
     src.close()
     tgt.close()
-    print("\n✓ Completado")
+    print("\nCompletado")
 
 
 if __name__ == "__main__":

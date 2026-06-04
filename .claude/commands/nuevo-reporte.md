@@ -40,7 +40,7 @@ Query que lee de `comercial` con los JOINs necesarios.
 
 ### 3. Crear script SQL — tabla desnormalizada
 
-Archivo: `scripts/create_<nombre>.sql`
+Archivo: `reportes/<nombre>/create_<tabla_desnorm>.sql`
 - DB destino: `comercialdesnormalized`
 - Sin claves foráneas
 - Grain: un registro por fila del query fuente
@@ -50,7 +50,7 @@ Archivo: `scripts/create_<nombre>.sql`
 
 ### 4. Crear script SQL — tabla agregada
 
-Archivo: `scripts/create_resumen_<nombre>.sql`  
+Archivo: `reportes/<nombre>/create_resumen_<nombre>.sql`
 - DB destino: `comercialaggregated`
 - Sin claves foráneas
 - Columnas de período: `periodo_inicio DATE`, `periodo_fin DATE`
@@ -61,27 +61,35 @@ Archivo: `scripts/create_resumen_<nombre>.sql`
 
 ### 5. Crear script de fill — desnormalizada
 
-Archivo: `scripts/fill_<nombre>.py`
+Archivo: `reportes/<nombre>/fill_<tabla_desnorm>.py`
 - Lee de `comercial`, escribe en `comercialdesnormalized`
 - Soporta `--full` y `--desde`/`--hasta`
 - Procesa en batches de 500
 - Usa `ON DUPLICATE KEY UPDATE`
-- Incluye `sys.stdout.reconfigure(encoding="utf-8")` al inicio
+- Al inicio del archivo:
+```python
+sys.stdout.reconfigure(encoding="utf-8")
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _ROOT)
+load_dotenv(os.path.join(_ROOT, ".env"))
+```
 
 ### 6. Crear script de fill — agregada
 
-Archivo: `scripts/fill_resumen_<nombre>.py`
+Archivo: `reportes/<nombre>/fill_resumen_<nombre>.py`
 - Lee de `comercialdesnormalized.<tabla>`, escribe en `comercialaggregated`
 - Soporta `--desde`/`--hasta`, `--sucursal`, `--todos`
 - Usa `ON DUPLICATE KEY UPDATE`
-- Incluye `sys.stdout.reconfigure(encoding="utf-8")` al inicio
+- Mismo bloque de inicio que el fill desnorm (con `_ROOT` a 3 niveles)
 
 ### 7. Crear script individual `<nombre>_all.py`
 
-Archivo: `scripts/<nombre>_all.py`
+Archivo: `reportes/<nombre>/<nombre>_all.py`
 
 Este script gestiona el ciclo completo del reporte de forma aislada, sin tocar
 los demás reportes. Permite probar y recargar un único reporte.
+
+Usar rutas absolutas para SQL y fills (basadas en `_DIR`), no relativas al cwd:
 
 ```python
 """
@@ -100,7 +108,9 @@ import os, sys, argparse, subprocess
 from datetime import date
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+_DIR  = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(os.path.dirname(_DIR))
+sys.path.insert(0, _ROOT)
 
 from dotenv import load_dotenv
 from utils.db_setup import drop_tables, run_sql_file
@@ -108,16 +118,15 @@ from utils.db_setup import drop_tables, run_sql_file
 load_dotenv()
 
 PYTHON = sys.executable
-ROOT   = os.path.dirname(os.path.dirname(__file__))
 
 TABLAS_DESNORM = ["<tabla_desnorm>"]
 TABLAS_AGG     = ["<tabla_agg>"]
 
-SQL_DESNORM    = "scripts/create_<nombre>.sql"
-SQL_AGG        = "scripts/create_resumen_<nombre>.sql"
+SQL_DESNORM = os.path.join(_DIR, "create_<tabla_desnorm>.sql")
+SQL_AGG     = os.path.join(_DIR, "create_resumen_<nombre>.sql")
 
-FILL_DESNORM   = ["scripts/fill_<nombre>.py", "--full"]
-# FILL_AGG se arma en main() para incluir --desde y --hasta
+FILL_DESNORM = os.path.join(_DIR, "fill_<tabla_desnorm>.py")
+FILL_AGG     = os.path.join(_DIR, "fill_resumen_<nombre>.py")
 
 
 def do_drop():
@@ -141,13 +150,12 @@ def do_create():
 def do_fill(desde: str, hasta: str):
     def run(label, cmd):
         print(f"\n── {label}")
-        r = subprocess.run(cmd, cwd=ROOT)
+        r = subprocess.run(cmd, cwd=_ROOT)
         if r.returncode != 0:
             sys.exit(r.returncode)
 
-    run("fill desnorm", [PYTHON] + FILL_DESNORM)
-    run("fill agg",     [PYTHON, "scripts/fill_resumen_<nombre>.py",
-                         "--desde", desde, "--hasta", hasta])
+    run("fill desnorm", [PYTHON, FILL_DESNORM, "--full"])
+    run("fill agg",     [PYTHON, FILL_AGG, "--desde", desde, "--hasta", hasta])
 
 
 def main():
@@ -188,19 +196,19 @@ os.getenv("DB_NAME_DESNORM"): ["linea_venta", "<nueva_tabla>"],
 os.getenv("DB_NAME_AGG"):     ["resumen_ventas", "resumen_<nombre>"],
 ```
 
-**`scripts/create_all.py`** — agregar los nuevos scripts SQL a la lista `SCRIPTS`:
+**`scripts/create_all.py`** — agregar a la lista `SCRIPTS`:
 ```python
-("scripts/create_<nombre>.sql",         os.getenv("DB_NAME_DESNORM")),
-("scripts/create_resumen_<nombre>.sql",  os.getenv("DB_NAME_AGG")),
+("reportes/<nombre>/create_<tabla_desnorm>.sql",   os.getenv("DB_NAME_DESNORM")),
+("reportes/<nombre>/create_resumen_<nombre>.sql",  os.getenv("DB_NAME_AGG")),
 ```
 
-**`scripts/fill_all.py`** — agregar los nuevos pasos después de los existentes:
+**`scripts/fill_all.py`** — agregar después de los fills existentes:
 ```python
-run("fill_<nombre> (comercialdesnormalized)",
-    [PYTHON, "scripts/fill_<nombre>.py", "--full"])
+run("fill <tabla_desnorm>",
+    [PYTHON, "reportes/<nombre>/fill_<tabla_desnorm>.py", "--full"])
 
-run("fill_resumen_<nombre> (comercialaggregated)",
-    [PYTHON, "scripts/fill_resumen_<nombre>.py",
+run("fill resumen_<nombre>",
+    [PYTHON, "reportes/<nombre>/fill_resumen_<nombre>.py",
      "--desde", args.desde, "--hasta", args.hasta])
 ```
 
