@@ -3,11 +3,8 @@ scripts/create_all.py
 Crea todas las tablas en las DBs desnormalizada y agregada.
 
 Uso:
-    # Solo crear (falla si las tablas ya existen)
-    python scripts/create_all.py
-
-    # Borrar primero y luego crear
-    python scripts/create_all.py --recreate
+    python scripts/create_all.py              # drop + create (default)
+    python scripts/create_all.py --create-only  # solo crear (falla si ya existen)
 """
 
 import os
@@ -32,13 +29,13 @@ SCRIPTS = [
 
 def main():
     p = argparse.ArgumentParser(description="Crea todas las tablas del proyecto")
-    p.add_argument("--recreate", action="store_true",
-                   help="Elimina las tablas existentes antes de crearlas")
+    p.add_argument("--create-only", action="store_true",
+                   help="Solo crear, sin borrar las tablas existentes primero")
     args = p.parse_args()
 
     for sql_file, db_name in SCRIPTS:
         print(f"\n{'─' * 50}")
-        if args.recreate:
+        if not args.create_only:
             tablas = tables_from_sql_file(sql_file)
             print(f"Dropping {tablas} en '{db_name}'...")
             drop_tables(tablas, db_name=db_name)
