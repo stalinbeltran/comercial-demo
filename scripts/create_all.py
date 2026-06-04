@@ -24,7 +24,7 @@ SCRIPTS = [
     ("reportes/ventas_por_categoria/create_resumen_ventas.sql",           os.getenv("DB_NAME_AGG")),
     ("reportes/ventas_consolidado/create_ventas_consolidado.sql",                          os.getenv("DB_NAME_DESNORM")),
     ("reportes/ventas_consolidado/create_resumen_ventas_consolidado.sql",                  os.getenv("DB_NAME_AGG")),
-    ("reportes/ventas_sucursal_comparativo/create_resumen_ventas_sucursal_mes.sql",        os.getenv("DB_NAME_AGG")),
+    ("reportes/ventas_sucursal_comparativo/create_resumen_ventas_sucursal_dia.sql",         os.getenv("DB_NAME_AGG")),
 ]
 
 

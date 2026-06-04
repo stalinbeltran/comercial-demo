@@ -1,15 +1,15 @@
 """
-reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py
-Lee de 'comercialdesnormalized.ventas_consolidado' y agrega por mes
-en 'comercialaggregated.resumen_ventas_sucursal_mes'.
+reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_dia.py
+Lee de 'comercialdesnormalized.ventas_consolidado' y agrega por DÍA
+en 'comercialaggregated.resumen_ventas_sucursal_dia'.
 
 Requiere que ventas_consolidado esté poblado previamente.
 
 Uso:
-    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py
-    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py --desde 2025-01-01 --hasta 2025-12-31
-    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py --sucursal 3
-    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py --todos
+    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_dia.py
+    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_dia.py --desde 2025-01-01 --hasta 2025-12-31
+    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_dia.py --sucursal 3
+    python reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_dia.py --todos
 """
 
 import os
@@ -40,36 +40,36 @@ def conn_target():
     return mysql.connector.connect(**_BASE, database=os.getenv("DB_NAME_AGG"))
 
 
-# Agrega totales por mes — todas las sucursales como una sola fila (sucursal_id = 0)
+# Agrega por día — todas las sucursales como una sola fila por día (sucursal_id = 0)
 _SQL_TOTAL = """
 SELECT
-    DATE_FORMAT(fecha_pedido, '%%Y-%%m-01')  AS mes,
-    ROUND(SUM(subtotal_linea), 2)            AS total_ventas,
-    COUNT(DISTINCT pedido_id)               AS total_pedidos,
-    COUNT(DISTINCT cliente_id)              AS clientes_activos
+    DATE(fecha_pedido)              AS fecha,
+    ROUND(SUM(subtotal_linea), 2)   AS total_ventas,
+    COUNT(DISTINCT pedido_id)       AS total_pedidos,
+    COUNT(DISTINCT cliente_id)      AS clientes_activos
 FROM ventas_consolidado
 WHERE estado_pedido NOT IN ('cancelado', 'anulado')
   AND fecha_pedido >= %s
   AND fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
-GROUP BY DATE_FORMAT(fecha_pedido, '%%Y-%%m-01')
+GROUP BY DATE(fecha_pedido)
 """
 
-# Agrega totales por mes para una sucursal específica
+# Agrega por día para una sucursal específica
 _SQL_POR_SUCURSAL = """
 SELECT
-    DATE_FORMAT(fecha_pedido, '%%Y-%%m-01')  AS mes,
+    DATE(fecha_pedido)              AS fecha,
     sucursal_id,
     sucursal_nombre,
     pais_nombre,
-    ROUND(SUM(subtotal_linea), 2)            AS total_ventas,
-    COUNT(DISTINCT pedido_id)               AS total_pedidos,
-    COUNT(DISTINCT cliente_id)              AS clientes_activos
+    ROUND(SUM(subtotal_linea), 2)   AS total_ventas,
+    COUNT(DISTINCT pedido_id)       AS total_pedidos,
+    COUNT(DISTINCT cliente_id)      AS clientes_activos
 FROM ventas_consolidado
 WHERE estado_pedido NOT IN ('cancelado', 'anulado')
   AND fecha_pedido >= %s
   AND fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)
   AND sucursal_id = %s
-GROUP BY DATE_FORMAT(fecha_pedido, '%%Y-%%m-01'), sucursal_id, sucursal_nombre, pais_nombre
+GROUP BY DATE(fecha_pedido), sucursal_id, sucursal_nombre, pais_nombre
 """
 
 _SQL_SUCURSALES = """
@@ -78,11 +78,11 @@ FROM ventas_consolidado WHERE sucursal_id IS NOT NULL ORDER BY sucursal_id
 """
 
 _SQL_UPSERT = """
-INSERT INTO resumen_ventas_sucursal_mes (
-    mes, sucursal_id, sucursal_nombre, pais_nombre,
+INSERT INTO resumen_ventas_sucursal_dia (
+    fecha, sucursal_id, sucursal_nombre, pais_nombre,
     total_ventas, total_pedidos, clientes_activos
 ) VALUES (
-    %(mes)s, %(sucursal_id)s, %(sucursal_nombre)s, %(pais_nombre)s,
+    %(fecha)s, %(sucursal_id)s, %(sucursal_nombre)s, %(pais_nombre)s,
     %(total_ventas)s, %(total_pedidos)s, %(clientes_activos)s
 )
 ON DUPLICATE KEY UPDATE
@@ -134,7 +134,7 @@ def get_sucursales(src) -> list:
 
 def main():
     hoy = date.today()
-    p = argparse.ArgumentParser(description="Fill resumen_ventas_sucursal_mes")
+    p = argparse.ArgumentParser(description="Fill resumen_ventas_sucursal_dia")
     p.add_argument("--desde",    type=date.fromisoformat, default=hoy.replace(day=1), metavar="YYYY-MM-DD")
     p.add_argument("--hasta",    type=date.fromisoformat, default=hoy, metavar="YYYY-MM-DD")
     p.add_argument("--sucursal", type=int, default=None, metavar="ID")
@@ -164,7 +164,7 @@ def main():
         n = fill_sucursal(src, tgt, args.desde, args.hasta, match["id"], match["nombre"])
         print(f"  {n} filas upserted")
     else:
-        print("Modo: total (todas las sucursales agregadas, sucursal_id = 0)")
+        print("Modo: total (todas las sucursales, sucursal_id = 0)")
         n = fill_total(src, tgt, args.desde, args.hasta)
         print(f"  {n} filas upserted")
 

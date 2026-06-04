@@ -19,7 +19,7 @@ load_dotenv()
 
 TABLAS = {
     os.getenv("DB_NAME_DESNORM"): ["linea_venta", "ventas_consolidado"],
-    os.getenv("DB_NAME_AGG"):     ["resumen_ventas", "resumen_ventas_consolidado", "resumen_ventas_sucursal_mes"],
+    os.getenv("DB_NAME_AGG"):     ["resumen_ventas", "resumen_ventas_consolidado", "resumen_ventas_sucursal_dia"],
 }
 
 

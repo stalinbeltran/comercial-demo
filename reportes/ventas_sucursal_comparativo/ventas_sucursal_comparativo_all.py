@@ -2,9 +2,8 @@
 reportes/ventas_sucursal_comparativo/ventas_sucursal_comparativo_all.py
 Gestiona el ciclo completo del reporte 1.2 — Ventas por sucursal comparativo.
 
-NOTA: Este reporte no tiene tabla desnorm propia.
-      Reutiliza comercialdesnormalized.ventas_consolidado como fuente.
-      Asegurarse de que ventas_consolidado esté poblado antes de correr el fill.
+NOTA: Reutiliza ventas_consolidado como fuente (sin tabla desnorm propia).
+      Asegurarse de que ventas_consolidado esté poblado antes del fill.
 
 Uso:
     python reportes/ventas_sucursal_comparativo/ventas_sucursal_comparativo_all.py
@@ -33,9 +32,9 @@ load_dotenv(os.path.join(_ROOT, ".env"))
 
 PYTHON = sys.executable
 
-TABLAS_AGG = ["resumen_ventas_sucursal_mes"]
-SQL_AGG    = os.path.join(_DIR, "create_resumen_ventas_sucursal_mes.sql")
-FILL_AGG   = os.path.join(_DIR, "fill_resumen_ventas_sucursal_mes.py")
+TABLAS_AGG = ["resumen_ventas_sucursal_dia"]
+SQL_AGG    = os.path.join(_DIR, "create_resumen_ventas_sucursal_dia.sql")
+FILL_AGG   = os.path.join(_DIR, "fill_resumen_ventas_sucursal_dia.py")
 
 
 def do_drop():
@@ -55,7 +54,7 @@ def do_fill(desde: str, hasta: str):
         if r.returncode != 0:
             sys.exit(r.returncode)
 
-    run("fill agg", [PYTHON, FILL_AGG, "--desde", desde, "--hasta", hasta])
+    run("fill agg diario", [PYTHON, FILL_AGG, "--desde", desde, "--hasta", hasta])
 
 
 def main():

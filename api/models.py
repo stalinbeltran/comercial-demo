@@ -66,8 +66,8 @@ class RespuestaVentasConsolidado(BaseModel):
 # ─── REPORTE 1.2: VENTAS POR SUCURSAL COMPARATIVO ────────────────────────────
 
 class FiltrosMes(BaseModel):
-    mes_actual:   str = Field(description="Mes de referencia aplicado (YYYY-MM)")
-    mes_anterior: str = Field(description="Mes de comparación aplicado (YYYY-MM)")
+    mes_actual:   str = Field(description="Mes de referencia aplicado (YYYY-MM). La API agrega los días del mes.")
+    mes_anterior: str = Field(description="Mes de comparación aplicado (YYYY-MM). La API agrega los días del mes.")
 
 
 class VentasSucursalComparativoItem(BaseModel):
