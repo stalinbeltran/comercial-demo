@@ -137,8 +137,28 @@ def _build_html() -> str:
   .file-block-header span{{font-weight:600;color:#2d3436}}
   .no-sql{{padding:.75rem .85rem;font-size:.85rem;color:#b2bec3}}
   .query-block{{padding:.75rem .85rem;border-top:1px solid #f0f0f0}}
-  .query-meta{{font-size:.75rem;color:#b2bec3;margin-bottom:.3rem}}
+  .query-meta{{font-size:.75rem;color:#b2bec3;margin-bottom:.4rem}}
   .query-meta b{{color:#636e72}}
+  .query-actions{{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem}}
+  .db-select{{border:1px solid #dfe6e9;border-radius:4px;padding:.2rem .4rem;
+              font-size:.78rem;color:#636e72;background:#fff;cursor:pointer}}
+  .run-btn{{display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .75rem;
+            background:#6c5ce7;color:#fff;border:none;border-radius:4px;
+            font-size:.78rem;font-weight:600;cursor:pointer}}
+  .run-btn:hover{{opacity:.85}} .run-btn:disabled{{opacity:.5;cursor:not-allowed}}
+  .query-result{{margin-top:.6rem}}
+  .result-table-wrap{{overflow:auto;max-height:280px;border:1px solid #f0f0f0;border-radius:6px}}
+  .result-table{{width:100%;border-collapse:collapse;font-size:.78rem}}
+  .result-table th{{position:sticky;top:0;background:#f0f3f8;padding:.35rem .6rem;
+                    text-align:left;font-weight:600;color:#636e72;
+                    white-space:nowrap;border-bottom:1px solid #dfe6e9}}
+  .result-table td{{padding:.35rem .6rem;border-bottom:1px solid #f8f8f8;white-space:nowrap}}
+  .result-table tr:last-child td{{border-bottom:none}}
+  .result-table td.null{{color:#b2bec3;font-style:italic}}
+  .run-error{{padding:.5rem .75rem;background:#fff5f5;border-left:3px solid #ff7675;
+              font-size:.82rem;color:#d63031;border-radius:4px}}
+  .run-info{{padding:.4rem .75rem;font-size:.82rem;color:#636e72;
+             background:#f8f9fa;border-radius:4px}}
   pre{{background:#2d3436;color:#dfe6e9;border-radius:6px;
        padding:.75rem 1rem;font-size:.78rem;overflow-x:auto;
        line-height:1.5;white-space:pre-wrap;word-break:break-word}}
@@ -293,7 +313,16 @@ function renderResults(results) {{
               línea <b>${{q.line}}</b>
               ${{q.variable ? '&nbsp;|&nbsp; variable <b>'+q.variable+'</b>' : ''}}
             </div>
+            <div class="query-actions">
+              <select class="db-select">
+                <option value="main">main</option>
+                <option value="agg">agg</option>
+                <option value="desnorm">desnorm</option>
+              </select>
+              <button class="run-btn" onclick="runQuery(this)">&#9654; Ejecutar</button>
+            </div>
             <pre>${{escHtml(q.sql.trim())}}</pre>
+            <div class="query-result"></div>
           </div>`).join('')
       : `<div class="no-sql">${{r.last_extracted ? 'Sin queries SQL en este archivo' : 'Aún no extraído'}}</div>`;
 
@@ -308,6 +337,53 @@ function renderResults(results) {{
       ${{queries}}
     </div>`;
   }}).join('');
+}}
+
+async function runQuery(btn) {{
+  const block     = btn.closest('.query-block');
+  const sql       = block.querySelector('pre').textContent;
+  const db        = block.querySelector('.db-select').value;
+  const resultDiv = block.querySelector('.query-result');
+
+  btn.disabled = true; btn.textContent = '…';
+  resultDiv.innerHTML = '';
+
+  try {{
+    const res  = await fetch('/sql-explorer/run', {{
+      method: 'POST',
+      headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{sql, db}}),
+    }});
+    const data = await res.json();
+
+    if (data.error) {{
+      resultDiv.innerHTML = `<div class="run-error">${{escHtml(data.error)}}</div>`;
+    }} else if (data.affected_rows !== undefined) {{
+      resultDiv.innerHTML = `<div class="run-info">&#10003; ${{data.affected_rows}} fila(s) afectadas</div>`;
+    }} else if (!data.rows.length) {{
+      resultDiv.innerHTML = '<div class="run-info">(sin resultados)</div>';
+    }} else {{
+      const heads = data.columns.map(c => `<th>${{escHtml(c)}}</th>`).join('');
+      const rows  = data.rows.map(r =>
+        '<tr>' + r.map(v => v === null
+          ? '<td class="null">NULL</td>'
+          : `<td>${{escHtml(String(v))}}</td>`
+        ).join('') + '</tr>'
+      ).join('');
+      resultDiv.innerHTML = `
+        <div class="result-table-wrap">
+          <table class="result-table">
+            <thead><tr>${{heads}}</tr></thead>
+            <tbody>${{rows}}</tbody>
+          </table>
+        </div>
+        <div style="font-size:.72rem;color:#b2bec3;margin-top:.3rem;">${{data.rows.length}} fila(s)</div>`;
+    }}
+  }} catch(e) {{
+    resultDiv.innerHTML = `<div class="run-error">${{escHtml(e.message)}}</div>`;
+  }} finally {{
+    btn.disabled = false; btn.innerHTML = '&#9654; Ejecutar';
+  }}
 }}
 
 function escHtml(s) {{
@@ -409,6 +485,41 @@ def sql_explorer_extract(payload: dict = Body(...)):
     )
 
     return {"results": results, "saved_to": str(OUTPUT_FILE.relative_to(ROOT))}
+
+
+@router.post(
+    "/sql-explorer/run",
+    summary="Ejecutar un query SQL",
+    description="Ejecuta un query SQL contra la base de datos indicada y devuelve los resultados.",
+)
+def sql_explorer_run(payload: dict = Body(...)):
+    from utils.sql_runner import run_query
+    import mysql.connector
+
+    sql    = payload.get("sql", "").strip()
+    db_key = payload.get("db", "main")
+
+    if not sql:
+        return {"error": "El query está vacío"}
+
+    try:
+        rows = run_query(sql, db_key)
+    except mysql.connector.Error as e:
+        return {"error": f"MySQL [{e.errno}]: {e.msg}"}
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+    if rows and "affected_rows" in rows[0]:
+        return {"affected_rows": rows[0]["affected_rows"]}
+
+    columns = list(rows[0].keys()) if rows else []
+    serialized = [
+        [str(row[c]) if row[c] is not None else None for c in columns]
+        for row in rows
+    ]
+    return {"columns": columns, "rows": serialized}
 
 
 @router.get(
