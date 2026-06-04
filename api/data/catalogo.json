@@ -4,75 +4,254 @@
       "modulo_id": 1,
       "modulo": "Ventas y Facturación",
       "reportes": [
-        {"numero": "1.1", "nombre": "Resumen de ventas consolidado",            "estado": "implementado", "endpoint": "/reportes/ventas-consolidado"},
-        {"numero": "1.2", "nombre": "Ventas por sucursal comparativo",           "estado": "implementado", "endpoint": "/reportes/ventas-sucursal-comparativo"},
-        {"numero": "1.3", "nombre": "Ventas por producto / categoría",           "estado": "implementado", "endpoint": "/reportes/ventas-por-categoria"},
-        {"numero": "1.4", "nombre": "Ventas por cliente (Top N)",                "estado": "pendiente",    "endpoint": null},
-        {"numero": "1.5", "nombre": "Efectividad de precios especiales",         "estado": "pendiente",    "endpoint": null},
-        {"numero": "1.6", "nombre": "Impacto de promociones",                    "estado": "pendiente",    "endpoint": null},
-        {"numero": "1.7", "nombre": "Pedidos por estado",                        "estado": "pendiente",    "endpoint": null},
-        {"numero": "1.8", "nombre": "Facturas por estado",                       "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "1.1",
+          "nombre": "Resumen de ventas consolidado",
+          "estado": "implementado",
+          "endpoint": "/reportes/ventas-consolidado",
+          "folder": "reportes/ventas_consolidado",
+          "creates": {
+            "resumen_ventas_consolidado": "CREATE TABLE resumen_ventas_consolidado (\n\n    id              BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,\n    periodo_inicio  DATE              NOT NULL,\n    periodo_fin     DATE              NOT NULL,\n    sucursal_id     INT UNSIGNED      NOT NULL DEFAULT 0,\n    sucursal_nombre VARCHAR(150)               DEFAULT NULL,\n    pais_nombre     VARCHAR(100)               DEFAULT NULL,\n    total_ventas    DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    total_pedidos   INT UNSIGNED      NOT NULL DEFAULT 0,\n    clientes_activos INT UNSIGNED     NOT NULL DEFAULT 0,\n    fecha_actualizacion DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP\n                        ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_rvc  PRIMARY KEY (id),\n    CONSTRAINT uq_rvc  UNIQUE (periodo_inicio, periodo_fin, sucursal_id)\n);",
+            "ventas_consolidado": "CREATE TABLE ventas_consolidado (\n\n    linea_id        INT UNSIGNED      NOT NULL,\n    pedido_id       INT UNSIGNED      NOT NULL,\n    numero_pedido   VARCHAR(30)       NOT NULL,\n    fecha_pedido    DATETIME          NOT NULL,\n    estado_pedido   VARCHAR(30)       NOT NULL,\n    moneda          CHAR(3)           NOT NULL,\n\n    cliente_id      INT UNSIGNED      NOT NULL,\n    sucursal_id     INT UNSIGNED      NOT NULL,\n    sucursal_nombre VARCHAR(150)      NOT NULL,\n    pais_id         SMALLINT UNSIGNED NOT NULL,\n    pais_nombre     VARCHAR(100)      NOT NULL,\n\n    subtotal_linea  DECIMAL(14, 4)    NOT NULL,\n\n    fecha_carga     DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP\n                    ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_vc PRIMARY KEY (linea_id)\n);"
+          }
+        },
+        {
+          "numero": "1.2",
+          "nombre": "Ventas por sucursal comparativo",
+          "estado": "implementado",
+          "endpoint": "/reportes/ventas-sucursal-comparativo",
+          "folder": "reportes/ventas_sucursal_comparativo",
+          "creates": {
+            "resumen_ventas_sucursal_dia": "CREATE TABLE resumen_ventas_sucursal_dia (\n\n    id               BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,\n\n    -- Día (granularidad diaria)\n    fecha            DATE              NOT NULL,\n\n    -- Sucursal (0 = todas)\n    sucursal_id      INT UNSIGNED      NOT NULL DEFAULT 0,\n    sucursal_nombre  VARCHAR(150)               DEFAULT NULL,\n    pais_nombre      VARCHAR(100)               DEFAULT NULL,\n\n    -- Métricas del día\n    total_ventas     DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    total_pedidos    INT UNSIGNED      NOT NULL DEFAULT 0,\n    clientes_activos INT UNSIGNED      NOT NULL DEFAULT 0,\n\n    -- Auditoría\n    fecha_actualizacion DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP\n                        ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_rvsd  PRIMARY KEY (id),\n    CONSTRAINT uq_rvsd  UNIQUE (fecha, sucursal_id)\n);"
+          }
+        },
+        {
+          "numero": "1.3",
+          "nombre": "Ventas por producto / categoría",
+          "estado": "implementado",
+          "endpoint": "/reportes/ventas-por-categoria",
+          "folder": "reportes/ventas_por_categoria",
+          "creates": {
+            "linea_venta": "CREATE TABLE linea_venta (\n\n    -- Identificadores de origen\n    linea_id                INT UNSIGNED      NOT NULL,\n    pedido_id               INT UNSIGNED      NOT NULL,\n\n    -- Pedido\n    numero_pedido           VARCHAR(30)       NOT NULL,\n    fecha_pedido            DATETIME          NOT NULL,\n    fecha_requerida         DATE                       DEFAULT NULL,\n    estado_pedido           VARCHAR(30)       NOT NULL,\n    moneda                  CHAR(3)           NOT NULL,\n\n    -- Cliente\n    cliente_id              INT UNSIGNED      NOT NULL,\n    cliente_nombre          VARCHAR(200)      NOT NULL,\n    cliente_tipo            VARCHAR(20)       NOT NULL,\n    cliente_identificacion  VARCHAR(50)                DEFAULT NULL,\n    grupo_cliente           VARCHAR(100)               DEFAULT NULL,\n\n    -- Sucursal y ciudad\n    sucursal_id             INT UNSIGNED      NOT NULL,\n    sucursal_nombre         VARCHAR(150)      NOT NULL,\n    ciudad_sucursal         VARCHAR(100)               DEFAULT NULL,\n\n    -- Categoría (jerarquía aplanada)\n    categoria               VARCHAR(150)               DEFAULT NULL,\n    subcategoria            VARCHAR(150)               DEFAULT NULL,\n\n    -- Producto\n    producto_id             INT UNSIGNED      NOT NULL,\n    sku                     VARCHAR(60)       NOT NULL,\n    producto                VARCHAR(200)      NOT NULL,\n    unidad_medida           VARCHAR(30)       NOT NULL,\n    precio_oficial          DECIMAL(14, 4)             DEFAULT NULL,\n\n    -- Bodega\n    bodega_id               INT UNSIGNED      NOT NULL,\n    bodega_nombre           VARCHAR(150)      NOT NULL,\n    tipo_bodega             VARCHAR(30)                DEFAULT NULL,\n\n    -- Línea (métricas de venta)\n    cantidad                DECIMAL(14, 4)    NOT NULL,\n    precio_unitario         DECIMAL(14, 4)    NOT NULL,\n    descuento_pct           DECIMAL(6, 4)     NOT NULL DEFAULT 0,\n    descuento_monto         DECIMAL(14, 4)    NOT NULL DEFAULT 0,\n    subtotal                DECIMAL(14, 4)    NOT NULL,\n    con_promocion           TINYINT(1)        NOT NULL DEFAULT 0,\n\n    -- Factura\n    factura_id              INT UNSIGNED               DEFAULT NULL,\n    numero_fiscal           VARCHAR(60)                DEFAULT NULL,\n    estado_factura          VARCHAR(20)                DEFAULT NULL,\n    fecha_emision           DATETIME                   DEFAULT NULL,\n    impuesto_pct            DECIMAL(6, 4)              DEFAULT NULL,\n\n    -- Auditoría de carga\n    fecha_carga             DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP\n                            ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_lv PRIMARY KEY (linea_id)\n);",
+            "resumen_ventas": "CREATE TABLE resumen_ventas (\n\n    id                  BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,\n\n    -- Período\n    periodo_inicio      DATE              NOT NULL,\n    periodo_fin         DATE              NOT NULL,\n\n    -- Sucursal (0 = todas las sucursales agregadas)\n    sucursal_id         INT UNSIGNED      NOT NULL DEFAULT 0,\n    sucursal_nombre     VARCHAR(150)               DEFAULT NULL,\n\n    -- Categoría (jerarquía aplanada)\n    categoria           VARCHAR(150)               DEFAULT NULL,\n    subcategoria        VARCHAR(150)               DEFAULT NULL,\n\n    -- Producto\n    producto_id         INT UNSIGNED      NOT NULL,\n    sku                 VARCHAR(60)       NOT NULL,\n    producto            VARCHAR(200)      NOT NULL,\n\n    -- Métricas agregadas\n    unidades_vendidas   DECIMAL(14, 4)    NOT NULL DEFAULT 0,\n    precio_promedio     DECIMAL(14, 4)    NOT NULL DEFAULT 0,\n    total_descuentos    DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    ingresos_netos      DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    num_pedidos         INT UNSIGNED      NOT NULL DEFAULT 0,\n\n    -- Auditoría de carga\n    fecha_actualizacion DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP\n                        ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_rv  PRIMARY KEY (id),\n    CONSTRAINT uq_rv  UNIQUE (periodo_inicio, periodo_fin, sucursal_id, producto_id)\n);"
+          }
+        },
+        {
+          "numero": "1.4",
+          "nombre": "Ventas por cliente (Top N)",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "1.5",
+          "nombre": "Efectividad de precios especiales",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "1.6",
+          "nombre": "Impacto de promociones",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "1.7",
+          "nombre": "Pedidos por estado",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "1.8",
+          "nombre": "Facturas por estado",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 2,
       "modulo": "Inventario y Bodegas",
       "reportes": [
-        {"numero": "2.1", "nombre": "Stock actual por bodega",                   "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.2", "nombre": "Stock consolidado por producto",            "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.3", "nombre": "Productos con stock crítico",               "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.4", "nombre": "Productos sin movimiento",                  "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.5", "nombre": "Rotación de inventario",                    "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.6", "nombre": "Trazabilidad de movimientos",               "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.7", "nombre": "Ajustes de inventario",                     "estado": "pendiente",    "endpoint": null},
-        {"numero": "2.8", "nombre": "Traslados entre bodegas",                   "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "2.1",
+          "nombre": "Stock actual por bodega",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.2",
+          "nombre": "Stock consolidado por producto",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.3",
+          "nombre": "Productos con stock crítico",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.4",
+          "nombre": "Productos sin movimiento",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.5",
+          "nombre": "Rotación de inventario",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.6",
+          "nombre": "Trazabilidad de movimientos",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.7",
+          "nombre": "Ajustes de inventario",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "2.8",
+          "nombre": "Traslados entre bodegas",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 3,
       "modulo": "Transporte y Logística",
       "reportes": [
-        {"numero": "3.1", "nombre": "Estado de recorridos activos",              "estado": "pendiente",    "endpoint": null},
-        {"numero": "3.2", "nombre": "Cumplimiento de entregas",                  "estado": "pendiente",    "endpoint": null},
-        {"numero": "3.3", "nombre": "Rendimiento por camión",                    "estado": "pendiente",    "endpoint": null},
-        {"numero": "3.4", "nombre": "Rendimiento por conductor",                 "estado": "pendiente",    "endpoint": null},
-        {"numero": "3.6", "nombre": "Entregas fallidas",                         "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "3.1",
+          "nombre": "Estado de recorridos activos",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "3.2",
+          "nombre": "Cumplimiento de entregas",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "3.3",
+          "nombre": "Rendimiento por camión",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "3.4",
+          "nombre": "Rendimiento por conductor",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "3.6",
+          "nombre": "Entregas fallidas",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 4,
       "modulo": "Clientes y Cartera",
       "reportes": [
-        {"numero": "4.1", "nombre": "Clientes activos / inactivos",              "estado": "pendiente",    "endpoint": null},
-        {"numero": "4.2", "nombre": "Pareto de clientes (80/20)",                "estado": "pendiente",    "endpoint": null},
-        {"numero": "4.4", "nombre": "Cuentas por cobrar vencidas",               "estado": "pendiente",    "endpoint": null},
-        {"numero": "4.5", "nombre": "Límites de crédito",                        "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "4.1",
+          "nombre": "Clientes activos / inactivos",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "4.2",
+          "nombre": "Pareto de clientes (80/20)",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "4.4",
+          "nombre": "Cuentas por cobrar vencidas",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "4.5",
+          "nombre": "Límites de crédito",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 5,
       "modulo": "Sucursales y Operaciones",
       "reportes": [
-        {"numero": "5.1", "nombre": "Dashboard operativo diario",                "estado": "pendiente",    "endpoint": null},
-        {"numero": "5.2", "nombre": "Comparativo de desempeño entre sucursales", "estado": "pendiente",    "endpoint": null},
-        {"numero": "5.3", "nombre": "Desempeño por país",                        "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "5.1",
+          "nombre": "Dashboard operativo diario",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "5.2",
+          "nombre": "Comparativo de desempeño entre sucursales",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "5.3",
+          "nombre": "Desempeño por país",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 6,
       "modulo": "Productos y Catálogo",
       "reportes": [
-        {"numero": "6.1", "nombre": "Productos más vendidos",                    "estado": "pendiente",    "endpoint": null},
-        {"numero": "6.3", "nombre": "Análisis de precios",                       "estado": "pendiente",    "endpoint": null},
-        {"numero": "6.4", "nombre": "Promociones activas y vencidas",            "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "6.1",
+          "nombre": "Productos más vendidos",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "6.3",
+          "nombre": "Análisis de precios",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "6.4",
+          "nombre": "Promociones activas y vencidas",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     },
     {
       "modulo_id": 7,
       "modulo": "Ejecutivos Consolidados",
       "reportes": [
-        {"numero": "7.1", "nombre": "Dashboard CEO (KPIs del día)",              "estado": "pendiente",    "endpoint": null},
-        {"numero": "7.6", "nombre": "Presupuesto vs ejecución",                  "estado": "pendiente",    "endpoint": null}
+        {
+          "numero": "7.1",
+          "nombre": "Dashboard CEO (KPIs del día)",
+          "estado": "pendiente",
+          "endpoint": null
+        },
+        {
+          "numero": "7.6",
+          "nombre": "Presupuesto vs ejecución",
+          "estado": "pendiente",
+          "endpoint": null
+        }
       ]
     }
   ]
