@@ -78,3 +78,41 @@ def load_creates() -> dict:
         return json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def detect_table_dbs(table_names: list[str]) -> dict[str, str]:
+    """Consulta INFORMATION_SCHEMA para determinar en qué DB existe cada tabla.
+
+    Usa una sola conexión (main) — el usuario tiene acceso a todos los schemas.
+
+    Args:
+        table_names: lista de nombres de tabla a buscar
+
+    Returns:
+        {table_name: db_key}  ej. {"resumen_ventas_consolidado": "agg"}
+    """
+    from utils.sql_runner import DB_MAP, run_query
+
+    if not table_names:
+        return {}
+
+    db_name_to_key = {v: k for k, v in DB_MAP.items() if v}
+    db_names = list(db_name_to_key.keys())
+
+    t_ph  = ", ".join(["%s"] * len(table_names))
+    db_ph = ", ".join(["%s"] * len(db_names))
+
+    sql = f"""
+        SELECT TABLE_NAME, TABLE_SCHEMA
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME  IN ({t_ph})
+          AND TABLE_SCHEMA IN ({db_ph})
+    """
+
+    rows = run_query(sql, "main", tuple(table_names + db_names))
+
+    return {
+        row["TABLE_NAME"]: db_name_to_key[row["TABLE_SCHEMA"]]
+        for row in rows
+        if row["TABLE_SCHEMA"] in db_name_to_key
+    }
