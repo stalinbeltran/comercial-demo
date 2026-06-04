@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
-from api.routes import reportes, catalogo, ventas_consolidado, ventas_sucursal_comparativo
+from api.routes import reportes, catalogo, ventas_consolidado, ventas_sucursal_comparativo, sql_explorer
 
 # Metadatos de tags — agregar una entrada por cada nuevo grupo de endpoints
 TAGS = [
@@ -17,6 +17,13 @@ TAGS = [
         "description": (
             "Inventario de todos los reportes del ERP con su estado de implementación. "
             "Ver la versión visual en [/catalogo](/catalogo)."
+        ),
+    },
+    {
+        "name": "SQL Explorer",
+        "description": (
+            "Herramienta para explorar y extraer queries SQL de los archivos Python del proyecto. "
+            "Ver la interfaz visual en [/sql-explorer](/sql-explorer)."
         ),
     },
 ]
@@ -56,6 +63,7 @@ app.include_router(reportes.router)
 app.include_router(ventas_consolidado.router)
 app.include_router(ventas_sucursal_comparativo.router)
 app.include_router(catalogo.router)
+app.include_router(sql_explorer.router)
 
 
 @app.get("/", include_in_schema=False)
