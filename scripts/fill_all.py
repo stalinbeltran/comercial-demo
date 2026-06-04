@@ -77,6 +77,10 @@ def main():
         [PYTHON, "reportes/ventas_consolidado/fill_resumen_ventas_consolidado.py",
          "--desde", args.desde, "--hasta", args.hasta])
 
+    run("fill resumen_ventas_sucursal_mes",
+        [PYTHON, "reportes/ventas_sucursal_comparativo/fill_resumen_ventas_sucursal_mes.py",
+         "--desde", args.desde, "--hasta", args.hasta])
+
     print(f"\n{'─' * 50}")
     print("✓ fill_all completado")
 

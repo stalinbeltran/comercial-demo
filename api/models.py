@@ -61,3 +61,34 @@ class RespuestaVentasConsolidado(BaseModel):
     filtros: FiltrosFecha
     resumen: ResumenVentasConsolidado
     datos:   list[VentasConsolidadoItem]
+
+
+# ─── REPORTE 1.2: VENTAS POR SUCURSAL COMPARATIVO ────────────────────────────
+
+class FiltrosMes(BaseModel):
+    mes_actual:   str = Field(description="Mes de referencia aplicado (YYYY-MM)")
+    mes_anterior: str = Field(description="Mes de comparación aplicado (YYYY-MM)")
+
+
+class VentasSucursalComparativoItem(BaseModel):
+    sucursal_id:      int           = Field(description="ID de sucursal. 0 = total global")
+    sucursal_nombre:  Optional[str] = Field(description="Nombre de la sucursal. null si es total global")
+    pais_nombre:      Optional[str] = Field(description="País de la sucursal")
+    mes_actual:       float         = Field(description="Total de ventas en el mes actual")
+    mes_anterior:     float         = Field(description="Total de ventas en el mes anterior")
+    variacion_pct:    Optional[float] = Field(description="Variación porcentual. null si mes_anterior = 0")
+    total_pedidos:    int           = Field(description="Pedidos distintos en el mes actual")
+    clientes_activos: int           = Field(description="Clientes distintos en el mes actual")
+
+
+class ResumenVentasSucursalComparativo(BaseModel):
+    total_sucursales:    int   = Field(description="Cantidad de sucursales en el resultado")
+    total_mes_actual:    float = Field(description="Suma global de ventas en mes actual")
+    total_mes_anterior:  float = Field(description="Suma global de ventas en mes anterior")
+    variacion_global_pct: Optional[float] = Field(description="Variación porcentual global")
+
+
+class RespuestaVentasSucursalComparativo(BaseModel):
+    filtros: FiltrosMes
+    resumen: ResumenVentasSucursalComparativo
+    datos:   list[VentasSucursalComparativoItem]

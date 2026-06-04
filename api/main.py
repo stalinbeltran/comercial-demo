@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
-from api.routes import reportes, catalogo, ventas_consolidado
+from api.routes import reportes, catalogo, ventas_consolidado, ventas_sucursal_comparativo
 
 # Metadatos de tags — agregar una entrada por cada nuevo grupo de endpoints
 TAGS = [
@@ -54,6 +54,7 @@ app = FastAPI(
 
 app.include_router(reportes.router)
 app.include_router(ventas_consolidado.router)
+app.include_router(ventas_sucursal_comparativo.router)
 app.include_router(catalogo.router)
 
 

@@ -5,7 +5,7 @@
       "modulo": "Ventas y Facturación",
       "reportes": [
         {"numero": "1.1", "nombre": "Resumen de ventas consolidado",            "estado": "implementado", "endpoint": "/reportes/ventas-consolidado"},
-        {"numero": "1.2", "nombre": "Ventas por sucursal comparativo",           "estado": "pendiente",    "endpoint": null},
+        {"numero": "1.2", "nombre": "Ventas por sucursal comparativo",           "estado": "implementado", "endpoint": "/reportes/ventas-sucursal-comparativo"},
         {"numero": "1.3", "nombre": "Ventas por producto / categoría",           "estado": "implementado", "endpoint": "/reportes/ventas-por-categoria"},
         {"numero": "1.4", "nombre": "Ventas por cliente (Top N)",                "estado": "pendiente",    "endpoint": null},
         {"numero": "1.5", "nombre": "Efectividad de precios especiales",         "estado": "pendiente",    "endpoint": null},
