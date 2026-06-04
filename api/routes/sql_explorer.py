@@ -48,7 +48,7 @@ def _build_html() -> str:
     for folder, files in groups.items():
         items = "".join(
             f"""<li data-has-data="{'true' if f in extracted else 'false'}">
-                  <label>
+                  <label title="{f}">
                     <input type="checkbox" class="file-cb" value="{f}">
                     <span class="fname">{Path(f).name}</span>
                     <span class="fpath">{f}</span>
@@ -80,8 +80,14 @@ def _build_html() -> str:
   header{{max-width:960px;margin:0 auto 1.5rem}}
   header h1{{font-size:1.6rem;font-weight:700;margin-bottom:.25rem}}
   header p{{color:#636e72;font-size:.95rem}}
-  .layout{{margin:0 auto;display:grid;
-           grid-template-columns:340px 1fr;gap:1.5rem;align-items:start}}
+  .layout{{display:flex;gap:0;align-items:start}}
+  #leftPanel{{width:340px;min-width:180px;max-width:680px;flex-shrink:0}}
+  .resizer{{width:10px;flex-shrink:0;cursor:col-resize;position:relative;
+            align-self:stretch;display:flex;align-items:center;justify-content:center}}
+  .resizer::after{{content:"";display:block;width:3px;height:40px;
+                   border-radius:2px;background:#e0e0e0;transition:background .15s}}
+  .resizer:hover::after,.resizer.dragging::after{{background:#0984e3}}
+  .right-panel{{flex:1;min-width:0}}
   .card{{background:#fff;border-radius:10px;padding:1.25rem;
          box-shadow:0 1px 4px rgba(0,0,0,.08)}}
   .panel-header{{display:flex;justify-content:space-between;
@@ -153,7 +159,7 @@ def _build_html() -> str:
 
 <div class="layout">
   <!-- Panel izquierdo: selector de archivos -->
-  <div class="card">
+  <div class="card" id="leftPanel">
     <div class="panel-header">
       <h2>Archivos del proyecto <small style="color:#b2bec3;font-weight:400">({total})</small></h2>
       <div class="sel-btns">
@@ -173,8 +179,10 @@ def _build_html() -> str:
     </div>
   </div>
 
+  <div class="resizer" id="resizer"></div>
+
   <!-- Panel derecho: resultados -->
-  <div class="card">
+  <div class="card right-panel">
     <div class="results-header">
       <h2>Queries extraídos</h2>
       <button class="btn btn-dl" id="btnDl" style="display:none"
@@ -305,6 +313,37 @@ function renderResults(results) {{
 function escHtml(s) {{
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }}
+
+// ── Resizer ──────────────────────────────────────────────────────────────────
+(function() {{
+  const resizer   = document.getElementById('resizer');
+  const leftPanel = document.getElementById('leftPanel');
+  let dragging = false, startX = 0, startW = 0;
+
+  resizer.addEventListener('mousedown', e => {{
+    dragging = true;
+    startX = e.clientX;
+    startW = leftPanel.getBoundingClientRect().width;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  }});
+
+  document.addEventListener('mousemove', e => {{
+    if (!dragging) return;
+    const w = Math.min(680, Math.max(180, startW + e.clientX - startX));
+    leftPanel.style.width = w + 'px';
+  }});
+
+  document.addEventListener('mouseup', () => {{
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }});
+}})();
 </script>
 </body>
 </html>"""
