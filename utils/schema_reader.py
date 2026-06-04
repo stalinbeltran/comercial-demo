@@ -1,11 +1,9 @@
-import json
 import re
 from pathlib import Path
 
 from utils.helpers import walk_files
 
 ROOT = Path(__file__).parent.parent
-OUTPUT_FILE = ROOT / "output" / "schema_creates.json"
 
 _CREATE_RE = re.compile(
     r"(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(.*?\);)",
@@ -57,27 +55,6 @@ def extract_creates(reportes_dir: str | Path) -> dict:
                 result[reporte][c["table"]] = c["sql"]
 
     return dict(sorted(result.items()))
-
-
-def save_creates(reportes_dir: str | Path = ROOT / "reportes") -> Path:
-    """Ejecuta extract_creates y guarda el resultado en output/schema_creates.json."""
-    data = extract_creates(reportes_dir)
-    OUTPUT_FILE.parent.mkdir(exist_ok=True)
-    OUTPUT_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return OUTPUT_FILE
-
-
-def load_creates() -> dict:
-    """Carga el JSON de schemas ya generado. Retorna {} si no existe."""
-    if not OUTPUT_FILE.exists():
-        return {}
-    try:
-        return json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
 
 
 def detect_table_dbs(table_names: list[str]) -> dict[str, str]:

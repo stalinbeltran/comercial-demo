@@ -1,11 +1,7 @@
 """
 scripts/extract_schema.py
-Recorre los archivos .sql de reportes/, extrae los CREATE TABLE y:
-  1. Guarda output/schema_creates.json  (reporte → tablas → CREATE SQL)
-  2. Actualiza api/data/catalogo.json   (añade 'folder' y 'creates' a cada reporte implementado)
-
-Las dos operaciones se coordinan en un solo script para que el catálogo
-siempre refleje exactamente lo que hay en disco.
+Recorre los archivos .sql de reportes/, extrae los CREATE TABLE y actualiza
+api/data/catalogo.json (añade 'folder' y 'creates' a cada reporte implementado).
 
 Uso:
     python scripts/extract_schema.py
@@ -24,7 +20,7 @@ CATALOGO_JSON = ROOT / "api" / "data" / "catalogo.json"
 
 sys.path.insert(0, str(ROOT))
 
-from utils.schema_reader import extract_creates, save_creates
+from utils.schema_reader import extract_creates
 
 
 def _folder_from_endpoint(endpoint: str | None) -> str | None:
@@ -87,16 +83,13 @@ def main() -> None:
         for tabla in tablas:
             print(f"    └─ {tabla}")
 
-    schema_file = save_creates(reportes_dir)
-    print(f"\n[1] Guardado: {schema_file.relative_to(ROOT)}")
-
     # ── 2. Actualizar catalogo.json ───────────────────────────────────────────
     updated = _update_catalogo(creates, reportes_dir)
     CATALOGO_JSON.write_text(
         json.dumps(updated, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    print(f"[2] Actualizado: {CATALOGO_JSON.relative_to(ROOT)}")
+    print(f"\n[1] Actualizado: {CATALOGO_JSON.relative_to(ROOT)}")
 
     # Resumen de reportes actualizados en el catálogo
     actualizados = [
