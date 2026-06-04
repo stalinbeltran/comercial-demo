@@ -4,10 +4,11 @@ import os
 _JSON_PATH = os.path.join(os.path.dirname(__file__), "catalogo.json")
 
 
-def _load() -> list:
+def load() -> list:
+    """Lee el JSON en cada llamada — sin caché, siempre actualizado."""
     with open(_JSON_PATH, encoding="utf-8") as f:
         return json.load(f)["modulos"]
 
 
-# Lista de módulos — leída en cada import (se recarga con uvicorn --reload)
-CATALOGO = _load()
+# Alias de compatibilidad para código que ya importa CATALOGO directamente
+CATALOGO = load()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
-from api.data.catalogo import CATALOGO
+from api.data.catalogo import load as load_catalogo
 
 router = APIRouter(tags=["Catálogo"])
 
@@ -18,6 +18,7 @@ def _badge(estado: str, endpoint: str | None) -> str:
 
 
 def _build_html() -> str:
+    CATALOGO = load_catalogo()
     total = sum(len(m["reportes"]) for m in CATALOGO)
     implementados = sum(
         1 for m in CATALOGO for r in m["reportes"] if r["estado"] == "implementado"
@@ -119,11 +120,12 @@ def catalogo_html():
     description="Mismos datos que `/catalogo` pero en formato JSON.",
 )
 def catalogo_json():
-    total = sum(len(m["reportes"]) for m in CATALOGO)
+    modulos = load_catalogo()
+    total = sum(len(m["reportes"]) for m in modulos)
     implementados = sum(
-        1 for m in CATALOGO for r in m["reportes"] if r["estado"] == "implementado"
+        1 for m in modulos for r in m["reportes"] if r["estado"] == "implementado"
     )
     return {
         "resumen": {"total": total, "implementados": implementados, "pendientes": total - implementados},
-        "modulos": CATALOGO,
+        "modulos": modulos,
     }
