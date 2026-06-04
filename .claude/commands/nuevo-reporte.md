@@ -89,8 +89,8 @@ scripts/<nombre>_all.py
 Gestiona el ciclo completo del reporte <nombre> de forma aislada.
 
 Uso:
-    python scripts/<nombre>_all.py                # solo fill
-    python scripts/<nombre>_all.py --recreate     # drop + create + fill
+    python scripts/<nombre>_all.py                # drop + create + fill (default)
+    python scripts/<nombre>_all.py --fill-only    # solo recarga datos (tablas deben existir)
     python scripts/<nombre>_all.py --drop         # solo drop tablas
     python scripts/<nombre>_all.py --create       # solo crear tablas
     python scripts/<nombre>_all.py --desde 2025-01-01 --hasta 2025-12-31
@@ -153,9 +153,9 @@ def do_fill(desde: str, hasta: str):
 def main():
     hoy = date.today()
     p = argparse.ArgumentParser(description="Ciclo completo reporte <nombre>")
-    p.add_argument("--recreate", action="store_true", help="Drop + create + fill")
-    p.add_argument("--drop",     action="store_true", help="Solo drop")
-    p.add_argument("--create",   action="store_true", help="Solo create")
+    p.add_argument("--fill-only", action="store_true", help="Solo recarga datos (tablas deben existir)")
+    p.add_argument("--drop",      action="store_true", help="Solo drop tablas")
+    p.add_argument("--create",    action="store_true", help="Solo crear tablas")
     p.add_argument("--desde", default=(hoy.replace(year=hoy.year-2)).isoformat(), metavar="YYYY-MM-DD")
     p.add_argument("--hasta", default=hoy.isoformat(), metavar="YYYY-MM-DD")
     args = p.parse_args()
@@ -164,11 +164,11 @@ def main():
         do_drop()
     elif args.create:
         do_create()
-    elif args.recreate:
-        do_drop()
-        do_create()
+    elif args.fill_only:
         do_fill(args.desde, args.hasta)
     else:
+        do_drop()
+        do_create()
         do_fill(args.desde, args.hasta)
 
     print("\n✓ Completado")
