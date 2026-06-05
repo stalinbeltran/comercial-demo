@@ -9,6 +9,12 @@
           "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_consolidado\nWHERE periodo_inicio >= %s\n  AND periodo_fin    <= %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n",
           "tables": [
             "resumen_ventas_consolidado"
+          ],
+          "params": [
+            {"pos": 1, "column": "periodo_inicio", "type": "DATE"},
+            {"pos": 2, "column": "periodo_fin",    "type": "DATE"},
+            {"pos": 3, "column": "sucursal_id",    "type": "INT UNSIGNED", "nullable": true},
+            {"pos": 4, "column": "sucursal_id",    "type": "INT UNSIGNED"}
           ]
         }
       ]
@@ -19,7 +25,13 @@
         {
           "line": 17,
           "variable": "_SQL_MES",
-          "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_sucursal_dia\nWHERE fecha BETWEEN %s AND %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n"
+          "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_sucursal_dia\nWHERE fecha BETWEEN %s AND %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n",
+          "params": [
+            {"pos": 1, "column": "fecha",       "type": "DATE"},
+            {"pos": 2, "column": "fecha",       "type": "DATE"},
+            {"pos": 3, "column": "sucursal_id", "type": "INT UNSIGNED", "nullable": true},
+            {"pos": 4, "column": "sucursal_id", "type": "INT UNSIGNED"}
+          ]
         }
       ]
     },
@@ -36,7 +48,8 @@
             "sucursal",
             "ciudad",
             "pais"
-          ]
+          ],
+          "params": []
         },
         {
           "line": 55,
@@ -48,6 +61,10 @@
             "sucursal",
             "ciudad",
             "pais"
+          ],
+          "params": [
+            {"pos": 1, "column": "fecha_pedido", "type": "DATE"},
+            {"pos": 2, "column": "fecha_pedido", "type": "DATE"}
           ]
         },
         {
@@ -57,6 +74,20 @@
           "tables": [
             "ventas_consolidado",
             "numero_pedido"
+          ],
+          "params": [
+            {"name": "linea_id",        "type": "INT UNSIGNED"},
+            {"name": "pedido_id",        "type": "INT UNSIGNED"},
+            {"name": "numero_pedido",    "type": "VARCHAR(30)"},
+            {"name": "fecha_pedido",     "type": "DATETIME"},
+            {"name": "estado_pedido",    "type": "VARCHAR(30)"},
+            {"name": "moneda",           "type": "CHAR(3)"},
+            {"name": "cliente_id",       "type": "INT UNSIGNED"},
+            {"name": "sucursal_id",      "type": "INT UNSIGNED"},
+            {"name": "sucursal_nombre",  "type": "VARCHAR(150)"},
+            {"name": "pais_id",          "type": "SMALLINT UNSIGNED"},
+            {"name": "pais_nombre",      "type": "VARCHAR(100)"},
+            {"name": "subtotal_linea",   "type": "DECIMAL(14, 4)"}
           ]
         }
       ]
