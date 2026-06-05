@@ -1,4 +1,5 @@
 import ast
+import re
 from pathlib import Path
 
 from utils.sql_runner import DB_MAP, run_query
@@ -7,6 +8,53 @@ SQL_KEYWORDS = {
     "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP",
     "ALTER", "WITH", "EXPLAIN", "SHOW", "TRUNCATE", "REPLACE",
 }
+
+# Palabras reservadas SQL que nunca son nombres de tabla
+_SQL_RESERVED = {
+    "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER",
+    "FULL", "CROSS", "ON", "AND", "OR", "NOT", "IN", "IS", "NULL", "AS",
+    "BY", "GROUP", "ORDER", "HAVING", "LIMIT", "OFFSET", "UNION", "ALL",
+    "DISTINCT", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
+    "CREATE", "DROP", "ALTER", "TABLE", "INDEX", "VIEW", "PROCEDURE",
+    "FUNCTION", "TRIGGER", "DATABASE", "SCHEMA", "WITH", "EXISTS",
+    "BETWEEN", "LIKE", "CASE", "WHEN", "THEN", "ELSE", "END", "IF",
+    "EXPLAIN", "SHOW", "TRUNCATE", "REPLACE", "USING", "NATURAL",
+    "STRAIGHT_JOIN", "SUBQUERY",
+}
+
+_TABLE_PATTERN = re.compile(
+    r"""
+    (?:
+        (?:FROM|JOIN|INNER\s+JOIN|LEFT\s+(?:OUTER\s+)?JOIN|RIGHT\s+(?:OUTER\s+)?JOIN
+          |FULL\s+(?:OUTER\s+)?JOIN|CROSS\s+JOIN|STRAIGHT_JOIN)
+        \s+
+        (`?[\w]+`?(?:\.`?[\w]+`?)*)   # tabla, opcionalmente db.tabla
+    |
+        (?:UPDATE|INTO)
+        \s+
+        (`?[\w]+`?(?:\.`?[\w]+`?)*)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def extract_tables_from_sql(sql: str) -> list[str]:
+    """Devuelve la lista de tablas consultadas en un query SQL."""
+    tables: list[str] = []
+    seen: set[str] = set()
+
+    for match in _TABLE_PATTERN.finditer(sql):
+        raw = match.group(1) or match.group(2) or ""
+        # Quitar backticks y tomar solo la parte del nombre de tabla (sin schema prefix)
+        name = raw.replace("`", "").split(".")[-1].strip()
+        upper = name.upper()
+        if name and upper not in _SQL_RESERVED and not upper.startswith("("):
+            if name not in seen:
+                seen.add(name)
+                tables.append(name)
+
+    return tables
 
 
 def _looks_like_sql(s: str) -> bool:
@@ -17,7 +65,7 @@ def _looks_like_sql(s: str) -> bool:
 def extract_sql_strings(source: str) -> list[dict]:
     """Parsea código Python y devuelve los queries SQL encontrados.
 
-    Cada entrada: {"line": int, "variable": str | None, "sql": str}
+    Cada entrada: {"line": int, "variable": str | None, "sql": str, "tables": list[str]}
     """
     tree = ast.parse(source)
     found: list[dict] = []
@@ -35,13 +83,23 @@ def extract_sql_strings(source: str) -> list[dict]:
                 text = value.value
                 if len(text) >= 10 and _looks_like_sql(text) and text not in seen:
                     seen.add(text)
-                    found.append({"line": value.lineno, "variable": var_name, "sql": text})
+                    found.append({
+                        "line": value.lineno,
+                        "variable": var_name,
+                        "sql": text,
+                        "tables": extract_tables_from_sql(text),
+                    })
 
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             text = node.value
             if len(text) >= 10 and _looks_like_sql(text) and text not in seen:
                 seen.add(text)
-                found.append({"line": node.lineno, "variable": None, "sql": text})
+                found.append({
+                    "line": node.lineno,
+                    "variable": None,
+                    "sql": text,
+                    "tables": extract_tables_from_sql(text),
+                })
 
     found.sort(key=lambda x: x["line"])
     return found
