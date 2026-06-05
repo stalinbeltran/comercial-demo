@@ -1,12 +1,15 @@
 {
   "files": {
     "api/routes/ventas_consolidado.py": {
-      "last_extracted": "2026-06-04T17:18:29",
+      "last_extracted": "2026-06-04T19:15:26",
       "queries": [
         {
           "line": 11,
           "variable": "_SQL",
-          "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_consolidado\nWHERE periodo_inicio >= %s\n  AND periodo_fin    <= %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n"
+          "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_consolidado\nWHERE periodo_inicio >= %s\n  AND periodo_fin    <= %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n",
+          "tables": [
+            "resumen_ventas_consolidado"
+          ]
         }
       ]
     },
@@ -17,6 +20,44 @@
           "line": 17,
           "variable": "_SQL_MES",
           "sql": "\nSELECT\n    sucursal_id,\n    sucursal_nombre,\n    pais_nombre,\n    SUM(total_ventas)     AS total_ventas,\n    SUM(total_pedidos)    AS total_pedidos,\n    SUM(clientes_activos) AS clientes_activos\nFROM resumen_ventas_sucursal_dia\nWHERE fecha BETWEEN %s AND %s\n  AND (%s IS NULL OR sucursal_id = %s)\nGROUP BY sucursal_id, sucursal_nombre, pais_nombre\nORDER BY total_ventas DESC\n"
+        }
+      ]
+    },
+    "reportes/ventas_consolidado/fill_ventas_consolidado.py": {
+      "last_extracted": "2026-06-04T19:16:35",
+      "queries": [
+        {
+          "line": 41,
+          "variable": "_SQL_SELECT_FULL",
+          "sql": "\nSELECT lp.id AS linea_id, lp.pedido_id, pd.numero_pedido, pd.fecha_pedido,\n    pd.estado AS estado_pedido, pd.moneda, pd.cliente_id,\n    su.id AS sucursal_id, su.nombre AS sucursal_nombre,\n    pa.id AS pais_id, pa.nombre AS pais_nombre,\n    lp.subtotal AS subtotal_linea\nFROM linea_pedido lp\nJOIN pedido   pd ON pd.id = lp.pedido_id\nJOIN sucursal su ON su.id = pd.sucursal_id\nJOIN ciudad   ci ON ci.id = su.ciudad_id\nJOIN pais     pa ON pa.id = ci.pais_id\nORDER BY lp.id\n",
+          "tables": [
+            "linea_pedido",
+            "pedido",
+            "sucursal",
+            "ciudad",
+            "pais"
+          ]
+        },
+        {
+          "line": 55,
+          "variable": "_SQL_SELECT_RANGO",
+          "sql": "\nSELECT lp.id AS linea_id, lp.pedido_id, pd.numero_pedido, pd.fecha_pedido,\n    pd.estado AS estado_pedido, pd.moneda, pd.cliente_id,\n    su.id AS sucursal_id, su.nombre AS sucursal_nombre,\n    pa.id AS pais_id, pa.nombre AS pais_nombre,\n    lp.subtotal AS subtotal_linea\nFROM linea_pedido lp\nJOIN pedido   pd ON pd.id = lp.pedido_id\nJOIN sucursal su ON su.id = pd.sucursal_id\nJOIN ciudad   ci ON ci.id = su.ciudad_id\nJOIN pais     pa ON pa.id = ci.pais_id\nWHERE pd.fecha_pedido >= %s\n  AND pd.fecha_pedido <  DATE_ADD(%s, INTERVAL 1 DAY)\nORDER BY lp.id\n",
+          "tables": [
+            "linea_pedido",
+            "pedido",
+            "sucursal",
+            "ciudad",
+            "pais"
+          ]
+        },
+        {
+          "line": 71,
+          "variable": "_SQL_UPSERT",
+          "sql": "\nINSERT INTO ventas_consolidado (\n    linea_id, pedido_id, numero_pedido, fecha_pedido, estado_pedido, moneda,\n    cliente_id, sucursal_id, sucursal_nombre, pais_id, pais_nombre, subtotal_linea\n) VALUES (\n    %(linea_id)s, %(pedido_id)s, %(numero_pedido)s, %(fecha_pedido)s,\n    %(estado_pedido)s, %(moneda)s,\n    %(cliente_id)s, %(sucursal_id)s, %(sucursal_nombre)s,\n    %(pais_id)s, %(pais_nombre)s, %(subtotal_linea)s\n)\nON DUPLICATE KEY UPDATE\n    numero_pedido=VALUES(numero_pedido), fecha_pedido=VALUES(fecha_pedido),\n    estado_pedido=VALUES(estado_pedido), sucursal_nombre=VALUES(sucursal_nombre),\n    pais_nombre=VALUES(pais_nombre), subtotal_linea=VALUES(subtotal_linea),\n    fecha_carga=NOW()\n",
+          "tables": [
+            "ventas_consolidado",
+            "numero_pedido"
+          ]
         }
       ]
     }
