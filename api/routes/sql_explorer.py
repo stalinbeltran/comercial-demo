@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 ROOT = Path(__file__).parent.parent.parent
 SCAN_DIRS = ["api", "reportes", "scripts", "utils"]
-OUTPUT_FILE = ROOT / "output" / "sql_extracted.json"
+OUTPUT_FILE   = ROOT / "output" / "sql_extracted.json"
+CATALOGO_FILE = ROOT / "api" / "data" / "catalogo.json"
 
 router = APIRouter(tags=["SQL Explorer"])
 
@@ -444,7 +445,15 @@ def sql_explorer_html():
     description="Recibe una lista de rutas de archivos .py y devuelve los queries SQL encontrados. Guarda el resultado en `output/sql_extracted.json`.",
 )
 def sql_explorer_extract(payload: dict = Body(...)):
-    from utils.sql_extract import extract_sql_strings
+    from utils.sql_extract import build_col_types, extract_sql_strings
+
+    col_types: dict = {}
+    if CATALOGO_FILE.exists():
+        try:
+            catalogo = json.loads(CATALOGO_FILE.read_text(encoding="utf-8"))
+            col_types = build_col_types(catalogo)
+        except Exception:
+            pass
 
     files: list[str] = payload.get("files", [])
     results = []
@@ -455,7 +464,7 @@ def sql_explorer_extract(payload: dict = Body(...)):
             continue
         try:
             source = abs_path.read_text(encoding="utf-8")
-            queries = extract_sql_strings(source)
+            queries = extract_sql_strings(source, col_types)
         except Exception:
             queries = []
 
