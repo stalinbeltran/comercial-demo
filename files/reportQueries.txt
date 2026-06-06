@@ -1,0 +1,479 @@
+# Reportes Ejecutivos — ERP Comercial Multi-sucursal
+
+## Índice de Reportes por Módulo
+
+| # | Módulo | Tabla fuente principal |
+|---|---|---|
+| 1.x | Ventas y Facturación | `sec_ventas_detalle`, `sec_facturas_cartera` |
+| 2.x | Inventario y Bodegas | `sec_inventario_snapshot`, `sec_movimientos_stock` |
+| 3.x | Transporte y Logística | `sec_logistica_entregas`, `sec_rendimiento_flota` |
+| 4.x | Clientes y Cartera | `sec_clientes_resumen`, `sec_facturas_cartera` |
+| 5.x | Sucursales y Operaciones | `sec_resumen_sucursal_dia` |
+| 6.x | Productos y Catálogo | `sec_promo_precios_diario`, `sec_ventas_detalle` |
+| 7.x | Ejecutivos Consolidados | Múltiples tablas |
+
+---
+
+## 1. VENTAS Y FACTURACIÓN
+
+### 1.1 Resumen de ventas consolidado
+```sql
+SELECT pais_nombre, sucursal_nombre,
+       SUM(subtotal_linea) AS total_ventas,
+       COUNT(DISTINCT pedido_id) AS total_pedidos,
+       COUNT(DISTINCT cliente_id) AS clientes_activos
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+  AND  estado_pedido NOT IN ('cancelado','anulado')
+GROUP  BY pais_id, sucursal_id
+ORDER  BY total_ventas DESC;
+```
+
+### 1.2 Ventas por sucursal comparativo
+```sql
+SELECT sucursal_nombre,
+       SUM(CASE WHEN anio_mes = :mes_actual  THEN subtotal_linea ELSE 0 END) AS mes_actual,
+       SUM(CASE WHEN anio_mes = :mes_anterior THEN subtotal_linea ELSE 0 END) AS mes_anterior,
+       ROUND((SUM(CASE WHEN anio_mes = :mes_actual   THEN subtotal_linea ELSE 0 END) /
+              NULLIF(SUM(CASE WHEN anio_mes = :mes_anterior THEN subtotal_linea ELSE 0 END),0) - 1) * 100, 2)
+       AS variacion_pct
+FROM   sec_ventas_detalle
+WHERE  anio_mes IN (:mes_actual, :mes_anterior)
+GROUP  BY sucursal_id
+ORDER  BY mes_actual DESC;
+```
+
+### 1.3 Ventas por producto / categoría
+```sql
+SELECT categoria_nombre, producto_sku, producto_nombre,
+       SUM(cantidad)       AS unidades_vendidas,
+       SUM(subtotal_linea) AS monto_vendido,
+       ROUND(SUM(subtotal_linea) / SUM(SUM(subtotal_linea)) OVER() * 100, 2) AS participacion_pct
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY categoria_id, producto_id
+ORDER  BY monto_vendido DESC;
+```
+
+### 1.4 Ventas por cliente (Top N)
+```sql
+SELECT cliente_nombre, grupo_cliente_nombre,
+       COUNT(DISTINCT pedido_id)       AS pedidos,
+       SUM(subtotal_linea)             AS total_comprado,
+       AVG(subtotal_linea)             AS ticket_promedio_linea
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY cliente_id
+ORDER  BY total_comprado DESC
+LIMIT  :n;
+```
+
+### 1.5 Efectividad de precios especiales
+```sql
+SELECT producto_nombre,
+       SUM(CASE WHEN tiene_precio_especial = 1 THEN subtotal_linea ELSE 0 END) AS venta_precio_esp,
+       SUM(CASE WHEN tiene_precio_especial = 0 THEN subtotal_linea ELSE 0 END) AS venta_precio_oficial,
+       SUM(descuento_monto) AS descuento_total_otorgado,
+       ROUND(AVG(descuento_pct) * 100, 2) AS descuento_promedio_pct
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY producto_id
+ORDER  BY descuento_total_otorgado DESC;
+```
+
+### 1.6 Impacto de promociones
+```sql
+SELECT promocion_nombre, producto_nombre,
+       SUM(cantidad)        AS unidades_bajo_promo,
+       SUM(subtotal_linea)  AS monto_bajo_promo,
+       SUM(descuento_monto) AS costo_descuentos
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+  AND  promocion_id IS NOT NULL
+GROUP  BY promocion_id, producto_id
+ORDER  BY costo_descuentos DESC;
+```
+
+### 1.7 Pedidos por estado
+```sql
+SELECT estado_pedido,
+       COUNT(DISTINCT pedido_id) AS cantidad_pedidos,
+       SUM(subtotal_linea)       AS monto_total
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido = :fecha
+GROUP  BY estado_pedido;
+```
+
+### 1.8 Facturas por estado
+```sql
+SELECT estado_factura,
+       COUNT(*)          AS cantidad,
+       SUM(total)        AS monto_total,
+       SUM(saldo_pendiente) AS saldo_por_cobrar
+FROM   sec_facturas_cartera
+WHERE  fecha_emision BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY estado_factura;
+```
+
+---
+
+## 2. INVENTARIO Y BODEGAS
+
+### 2.1 Stock actual por bodega
+```sql
+SELECT pais_nombre, sucursal_nombre, bodega_nombre,
+       producto_sku, producto_nombre, categoria_nombre,
+       cantidad_disponible, cantidad_reservada, valor_stock_oficial,
+       stock_critico
+FROM   sec_inventario_snapshot
+WHERE  fecha_snapshot = :fecha
+ORDER  BY stock_critico DESC, cantidad_disponible ASC;
+```
+
+### 2.2 Stock consolidado por producto
+```sql
+SELECT producto_sku, producto_nombre, categoria_nombre,
+       SUM(cantidad_total)      AS stock_total,
+       SUM(cantidad_disponible) AS stock_disponible,
+       SUM(valor_stock_oficial) AS valor_total,
+       MAX(stock_critico)       AS alerta_critico
+FROM   sec_inventario_snapshot
+WHERE  fecha_snapshot = :fecha
+GROUP  BY producto_id
+ORDER  BY alerta_critico DESC, stock_disponible ASC;
+```
+
+### 2.3 Productos con stock crítico
+```sql
+SELECT pais_nombre, sucursal_nombre, bodega_nombre,
+       producto_nombre, cantidad_disponible, dias_cobertura
+FROM   sec_inventario_snapshot
+WHERE  fecha_snapshot = :fecha
+  AND  stock_critico = 1
+ORDER  BY dias_cobertura ASC;
+```
+
+### 2.4 Productos sin movimiento
+```sql
+SELECT producto_nombre, categoria_nombre,
+       bodega_nombre, sucursal_nombre,
+       cantidad_total, valor_stock_oficial,
+       sin_movimiento_30d, sin_movimiento_60d, sin_movimiento_90d
+FROM   sec_inventario_snapshot
+WHERE  fecha_snapshot = :fecha
+  AND  sin_movimiento_90d = 1
+ORDER  BY valor_stock_oficial DESC;
+```
+
+### 2.5 Rotación de inventario
+```sql
+SELECT producto_nombre, categoria_nombre,
+       AVG(indice_rotacion_90d) AS rotacion_90d,
+       AVG(dias_cobertura)      AS cobertura_dias_promedio
+FROM   sec_inventario_snapshot
+WHERE  fecha_snapshot BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY producto_id
+ORDER  BY rotacion_90d DESC;
+```
+
+### 2.6 Trazabilidad de movimientos
+```sql
+SELECT fecha, tipo_movimiento, bodega_nombre,
+       producto_nombre, cantidad, stock_antes, stock_despues,
+       referencia_tipo, referencia_id
+FROM   sec_movimientos_stock
+WHERE  producto_id = :producto_id
+  AND  fecha_dia BETWEEN :fecha_inicio AND :fecha_fin
+ORDER  BY fecha DESC;
+```
+
+### 2.7 Ajustes de inventario
+```sql
+SELECT bodega_nombre, sucursal_nombre,
+       COUNT(*)         AS total_ajustes,
+       SUM(CASE WHEN tipo_movimiento = 'ajuste_positivo' THEN cantidad ELSE 0 END) AS ajustes_positivos,
+       SUM(CASE WHEN tipo_movimiento = 'ajuste_negativo' THEN cantidad ELSE 0 END) AS ajustes_negativos,
+       SUM(valor_movimiento) AS impacto_valor
+FROM   sec_movimientos_stock
+WHERE  es_ajuste = 1
+  AND  anio = :anio AND mes = :mes
+GROUP  BY bodega_id
+ORDER  BY total_ajustes DESC;
+```
+
+### 2.8 Traslados entre bodegas
+```sql
+SELECT bodega_nombre AS origen, bodega_destino_nombre AS destino,
+       COUNT(*)         AS total_traslados,
+       SUM(cantidad)    AS unidades_trasladadas,
+       SUM(valor_movimiento) AS valor_trasladado
+FROM   sec_movimientos_stock
+WHERE  es_traslado = 1
+  AND  anio = :anio AND mes = :mes
+GROUP  BY bodega_id, bodega_destino_id
+ORDER  BY unidades_trasladadas DESC;
+```
+
+---
+
+## 3. TRANSPORTE Y LOGÍSTICA
+
+### 3.1 Estado de recorridos activos
+```sql
+SELECT camion_patente, conductor_nombre, ruta_nombre,
+       paradas_totales, paradas_completadas, paradas_fallidas,
+       pct_completado, estado_recorrido
+FROM   sec_rendimiento_flota
+WHERE  fecha_salida = CURDATE()
+  AND  estado_recorrido = 'en_curso'
+ORDER  BY pct_completado ASC;
+```
+
+### 3.2 Cumplimiento de entregas
+```sql
+SELECT conductor_nombre, camion_patente,
+       COUNT(*)                          AS total_entregas,
+       SUM(entrega_a_tiempo)             AS a_tiempo,
+       SUM(fue_exitosa)                  AS exitosas,
+       ROUND(AVG(entrega_a_tiempo)*100,1) AS pct_a_tiempo,
+       AVG(dias_retraso)                 AS retraso_promedio_dias
+FROM   sec_logistica_entregas
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY conductor_id, camion_id
+ORDER  BY pct_a_tiempo ASC;
+```
+
+### 3.3 Rendimiento por camión
+```sql
+SELECT camion_patente, camion_marca, camion_modelo,
+       COUNT(*)              AS recorridos,
+       SUM(km_recorridos)    AS km_totales,
+       SUM(paradas_completadas) AS entregas_realizadas,
+       AVG(pct_ocupacion_kg) AS ocupacion_promedio_pct,
+       SUM(valor_carga_total) AS valor_transportado
+FROM   sec_rendimiento_flota
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY camion_id
+ORDER  BY km_totales DESC;
+```
+
+### 3.4 Rendimiento por conductor
+```sql
+SELECT conductor_nombre,
+       COUNT(*)                          AS recorridos,
+       SUM(paradas_completadas)          AS entregas_completadas,
+       SUM(paradas_fallidas)             AS entregas_fallidas,
+       ROUND(AVG(recorrido_a_tiempo)*100,1) AS pct_a_tiempo,
+       AVG(desviacion_tiempo_min)        AS desviacion_promedio_min
+FROM   sec_rendimiento_flota
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY conductor_id
+ORDER  BY pct_a_tiempo DESC;
+```
+
+### 3.6 Entregas fallidas
+```sql
+SELECT motivo_fallo,
+       COUNT(*)        AS cantidad,
+       SUM(valor_pedido) AS valor_afectado,
+       SUM(requirio_reintento) AS reintentos
+FROM   sec_logistica_entregas
+WHERE  fue_exitosa = 0
+  AND  anio = :anio AND mes = :mes
+GROUP  BY motivo_fallo
+ORDER  BY cantidad DESC;
+```
+
+---
+
+## 4. CLIENTES Y CARTERA
+
+### 4.1 Clientes activos / inactivos
+```sql
+SELECT segmento_actividad,
+       COUNT(*)              AS cantidad_clientes,
+       SUM(facturado_periodo) AS facturado_total,
+       AVG(ticket_promedio_historico) AS ticket_promedio
+FROM   sec_clientes_resumen
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY segmento_actividad;
+```
+
+### 4.2 Pareto de clientes (80/20)
+```sql
+SELECT cliente_nombre, facturado_periodo,
+       SUM(facturado_periodo) OVER (ORDER BY facturado_periodo DESC) AS acumulado,
+       SUM(facturado_periodo) OVER ()                                 AS total_general,
+       ROUND(SUM(facturado_periodo) OVER (ORDER BY facturado_periodo DESC) /
+             SUM(facturado_periodo) OVER () * 100, 2)                 AS pct_acumulado
+FROM   sec_clientes_resumen
+WHERE  anio = :anio AND mes = :mes
+ORDER  BY facturado_periodo DESC;
+```
+
+### 4.4 Cuentas por cobrar vencidas
+```sql
+SELECT cliente_nombre, numero_fiscal, fecha_vencimiento,
+       dias_mora, total, saldo_pendiente
+FROM   sec_facturas_cartera
+WHERE  esta_vencida = 1
+  AND  estado_factura NOT IN ('pagada','anulada')
+ORDER  BY dias_mora DESC, saldo_pendiente DESC;
+```
+
+### 4.5 Límites de crédito
+```sql
+SELECT cliente_nombre, limite_credito,
+       credito_usado_acumulado, pct_credito_usado
+FROM   sec_facturas_cartera
+WHERE  fecha_emision <= CURDATE()
+  AND  estado_factura NOT IN ('pagada','anulada')
+GROUP  BY cliente_id
+HAVING pct_credito_usado > 80
+ORDER  BY pct_credito_usado DESC;
+```
+
+---
+
+## 5. SUCURSALES Y OPERACIONES
+
+### 5.1 Dashboard operativo diario
+```sql
+SELECT sucursal_nombre, pais_nombre,
+       pedidos_total, pedidos_entregados, pedidos_cancelados,
+       monto_facturado, facturas_vencidas_acum, monto_vencido_acum,
+       entregas_completadas, pct_entregas_exitosas,
+       productos_stock_critico, productos_sin_stock
+FROM   sec_resumen_sucursal_dia
+WHERE  fecha = CURDATE()
+ORDER  BY monto_facturado DESC;
+```
+
+### 5.2 Comparativo de desempeño entre sucursales
+```sql
+SELECT sucursal_nombre, pais_nombre,
+       SUM(monto_facturado)           AS facturado_mes,
+       SUM(pedidos_entregados)        AS entregas_mes,
+       AVG(pct_entregas_exitosas)     AS pct_entrega_prom,
+       AVG(variacion_vs_mes_ant_pct)  AS variacion_vs_mes_ant
+FROM   sec_resumen_sucursal_dia
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY sucursal_id
+ORDER  BY facturado_mes DESC;
+```
+
+### 5.3 Desempeño por país
+```sql
+SELECT pais_nombre,
+       SUM(monto_facturado)    AS facturado_total,
+       SUM(pedidos_total)      AS pedidos_total,
+       AVG(ticket_promedio_dia) AS ticket_promedio,
+       SUM(productos_stock_critico) AS alertas_stock
+FROM   sec_resumen_sucursal_dia
+WHERE  anio = :anio AND mes = :mes
+GROUP  BY pais_id
+ORDER  BY facturado_total DESC;
+```
+
+---
+
+## 6. PRODUCTOS Y CATÁLOGO
+
+### 6.1 Productos más vendidos
+```sql
+SELECT producto_sku, producto_nombre, categoria_nombre,
+       SUM(cantidad)       AS unidades,
+       SUM(subtotal_linea) AS monto
+FROM   sec_ventas_detalle
+WHERE  fecha_pedido BETWEEN :fecha_inicio AND :fecha_fin
+GROUP  BY producto_id
+ORDER  BY monto DESC
+LIMIT  :n;
+```
+
+### 6.3 Análisis de precios
+```sql
+SELECT producto_nombre, precio_oficial,
+       precio_especial_minimo, precio_especial_maximo,
+       descuento_especial_max_pct, cantidad_precios_especiales
+FROM   sec_promo_precios_diario
+WHERE  fecha = CURDATE()
+  AND  cantidad_precios_especiales > 0
+ORDER  BY descuento_especial_max_pct DESC;
+```
+
+### 6.4 Promociones activas y vencidas
+```sql
+SELECT producto_nombre, promocion_nombre, promocion_tipo,
+       promocion_fecha_inicio, promocion_fecha_fin,
+       dias_restantes_promo, pct_vida_promo_transcurrido,
+       unidades_bajo_promo_30d, costo_descuento_dia
+FROM   sec_promo_precios_diario
+WHERE  fecha = CURDATE()
+  AND  tiene_promocion_activa = 1
+ORDER  BY dias_restantes_promo ASC;
+```
+
+---
+
+## 7. REPORTES EJECUTIVOS CONSOLIDADOS
+
+### 7.1 Dashboard CEO (KPIs del día)
+```sql
+-- Ingresos del día
+SELECT SUM(monto_facturado)        AS facturado_hoy,
+       SUM(pedidos_total)          AS pedidos_hoy,
+       SUM(entregas_completadas)   AS entregas_hoy,
+       SUM(productos_stock_critico) AS alertas_stock,
+       SUM(monto_vencido_acum)     AS cartera_vencida
+FROM   sec_resumen_sucursal_dia
+WHERE  fecha = CURDATE();
+```
+
+### 7.6 Presupuesto vs ejecución
+```sql
+-- Requiere tabla de presupuesto (budget) adicional
+SELECT s.sucursal_nombre, s.pais_nombre,
+       SUM(s.monto_facturado) AS facturado_real
+       -- JOIN con tabla de presupuesto para agregar meta
+FROM   sec_resumen_sucursal_dia s
+WHERE  s.anio = :anio AND s.mes = :mes
+GROUP  BY s.sucursal_id;
+```
+
+---
+
+## Queries de sec_promo_precios_diario por Granularidad
+
+```sql
+-- Diario: ventas con y sin promoción
+SELECT fecha, producto_nombre,
+       unidades_vendidas, unidades_bajo_promo, pct_unidades_bajo_promo,
+       costo_descuento_dia, uplift_unidades_pct
+FROM   sec_promo_precios_diario
+WHERE  producto_id = :id AND fecha BETWEEN :f1 AND :f2
+ORDER  BY fecha;
+
+-- Semanal: tendencia de efectividad
+SELECT anio_semana, producto_nombre,
+       SUM(unidades_vendidas) AS unidades,
+       AVG(uplift_unidades_pct) AS uplift_prom
+FROM   sec_promo_precios_diario
+WHERE  anio_trimestre = :trimestre
+GROUP  BY anio_semana, producto_id;
+
+-- Mensual: cierre de promociones
+SELECT anio_mes, promocion_nombre,
+       SUM(unidades_bajo_promo)      AS unidades_promovidas,
+       SUM(costo_descuento_dia)      AS costo_total,
+       SUM(ingreso_incremental_estimado) AS ingreso_incremental
+FROM   sec_promo_precios_diario
+WHERE  anio = :anio AND tiene_promocion_activa = 1
+GROUP  BY anio_mes, promocion_id;
+
+-- Día de la semana: estacionalidad
+SELECT dia_semana, AVG(unidades_vendidas) AS promedio_unidades
+FROM   sec_promo_precios_diario
+WHERE  producto_id = :id AND anio = :anio
+GROUP  BY dia_semana;
+```
