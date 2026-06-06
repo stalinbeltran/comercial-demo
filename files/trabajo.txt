@@ -12,3 +12,9 @@ revisa que el json guarde la información obtenida de la configuracion
 
 "resumen_ventas_consolidado": "CREATE TABLE resumen_ventas_consolidado (\n\n    id              BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,\n    periodo_inicio  DATE              NOT NULL,\n    periodo_fin     DATE              NOT NULL,\n    sucursal_id     INT UNSIGNED      NOT NULL DEFAULT 0,\n    sucursal_nombre VARCHAR(150)               DEFAULT NULL,\n    pais_nombre     VARCHAR(100)               DEFAULT NULL,\n    total_ventas    DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    total_pedidos   INT UNSIGNED      NOT NULL DEFAULT 0,\n    clientes_activos INT UNSIGNED     NOT NULL DEFAULT 0,\n    fecha_actualizacion DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP\n                        ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_rvc  PRIMARY KEY (id),\n    CONSTRAINT uq_rvc  UNIQUE (periodo_inicio, periodo_fin, sucursal_id)\n);",
 
+
+http://localhost:8000/catalogo
+http://localhost:8000/sql-explorer
+
+
+
