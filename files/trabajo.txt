@@ -1,0 +1,14 @@
+https://www.skills.sh/mattpocock/skills/grill-me
+
+An environment file is configured but terminal environment injection is disabled. Enable "python.terminal.useEnvFile" to use environment variables from .env files in terminals.
+
+(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& c:\Desarrollo\comercial\venv\Scripts\Activate.ps1)
+
+
+
+python utils/db_setup.py --file scripts/create_resumen_ventas.sql --db comercialaggregated
+
+revisa que el json guarde la información obtenida de la configuracion
+
+"resumen_ventas_consolidado": "CREATE TABLE resumen_ventas_consolidado (\n\n    id              BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,\n    periodo_inicio  DATE              NOT NULL,\n    periodo_fin     DATE              NOT NULL,\n    sucursal_id     INT UNSIGNED      NOT NULL DEFAULT 0,\n    sucursal_nombre VARCHAR(150)               DEFAULT NULL,\n    pais_nombre     VARCHAR(100)               DEFAULT NULL,\n    total_ventas    DECIMAL(14, 2)    NOT NULL DEFAULT 0,\n    total_pedidos   INT UNSIGNED      NOT NULL DEFAULT 0,\n    clientes_activos INT UNSIGNED     NOT NULL DEFAULT 0,\n    fecha_actualizacion DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP\n                        ON UPDATE CURRENT_TIMESTAMP,\n\n    CONSTRAINT pk_rvc  PRIMARY KEY (id),\n    CONSTRAINT uq_rvc  UNIQUE (periodo_inicio, periodo_fin, sucursal_id)\n);",
+
